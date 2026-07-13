@@ -1,216 +1,368 @@
 package io.github.projectunified.craftconfig.proxy;
 
-import io.github.projectunified.craftconfig.annotation.Comment;
+import io.github.projectunified.craftconfig.annotation.ConfigNode;
 import io.github.projectunified.craftconfig.annotation.ConfigPath;
 import io.github.projectunified.craftconfig.annotation.StickyValue;
-import io.github.projectunified.craftconfig.common.CommentType;
+import io.github.projectunified.craftconfig.annotation.converter.Converter;
 import io.github.projectunified.craftconfig.common.Config;
-import io.github.projectunified.craftconfig.common.ConfigNode;
+import io.github.projectunified.craftconfig.gson.GsonConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.util.*;
+import java.io.File;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigGeneratorTest {
 
-    private SimpleMapConfig config;
+    @TempDir
+    Path tempDir;
+
+    private GsonConfig config;
 
     @BeforeEach
     void setUp() {
-        config = new SimpleMapConfig();
+        config = new GsonConfig(tempDir.resolve("test.json").toFile());
+        config.setup();
     }
 
     @Test
     void newInstanceReturnsProxyOfCorrectType() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         assertNotNull(proxy);
-        assertTrue(proxy instanceof TestConfigProxy);
+        assertTrue(proxy instanceof MyConfig);
     }
 
     @Test
-    void getterReturnsDefaultValueWhenConfigIsEmpty() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+    void getterWithConfigPathReturnsDefaultValue() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        assertEquals("default", proxy.name());
+        assertEquals(42, proxy.port());
+        assertTrue(proxy.enabled());
+    }
+
+    @Test
+    void getterWithPrefixConventionReturnsDefaultValue() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         assertEquals("default", proxy.getName());
-        assertEquals(42, proxy.getPort());
         assertTrue(proxy.isEnabled());
     }
 
     @Test
     void getterReturnsConfigValueWhenSet() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         config.node("name").set("custom");
         config.node("port").set(8080);
         config.node("enabled").set(false);
 
+        assertEquals("custom", proxy.name());
+        assertEquals(8080, proxy.port());
+        assertFalse(proxy.enabled());
+    }
+
+    @Test
+    void prefixGetterReturnsConfigValueWhenSet() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        config.node("name").set("custom");
+        config.node("enabled").set(false);
+
         assertEquals("custom", proxy.getName());
-        assertEquals(8080, proxy.getPort());
         assertFalse(proxy.isEnabled());
     }
 
     @Test
-    void isGetterReadsFromCorrectPath() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
-        config.node("debug").set(true);
-        assertTrue(proxy.isDebug());
-        config.node("debug").set(false);
-        assertFalse(proxy.isDebug());
+    void setterSetsValueAndSaves() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        proxy.name("newValue");
+        assertEquals("newValue", config.node("name").get(String.class));
     }
 
     @Test
-    void setterSetsValueAndSaves() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+    void prefixSetterSetsValueAndSaves() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         proxy.setName("newValue");
-        assertEquals("newValue", config.node("name").get());
-        assertTrue(config.saved);
+        assertEquals("newValue", config.node("name").get(String.class));
     }
 
     @Test
     void setterClearsCache() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config, true, true);
-        proxy.getName();
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config, true, true);
+        proxy.name();
         config.node("name").set("cached");
-        proxy.setName("newValue");
-        assertEquals("newValue", proxy.getName());
+        proxy.name("newValue");
+        assertEquals("newValue", proxy.name());
     }
 
     @Test
     void getConfigReturnsUnderlyingConfig() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         Config returnedConfig = proxy.getConfig();
         assertSame(config, returnedConfig);
     }
 
     @Test
     void reloadConfigReloadsAndClearsCaches() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config, true, true);
-        proxy.getName();
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config, true, true);
+        proxy.name();
         config.node("name").set("reloaded");
-        config.reloaded = false;
+        config.save();
         proxy.reloadConfig();
-        assertTrue(config.reloaded);
-        assertEquals("reloaded", proxy.getName());
+        assertEquals("reloaded", proxy.name());
     }
 
     @Test
     void toStringReturnsClassName() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
-        assertEquals(TestConfigProxy.class.toString(), proxy.toString());
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        assertEquals(MyConfig.class.toString(), proxy.toString());
     }
 
     @Test
     void hashCodeReturnsClassHashCode() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
-        assertEquals(TestConfigProxy.class.hashCode(), proxy.hashCode());
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        assertEquals(MyConfig.class.hashCode(), proxy.hashCode());
     }
 
     @Test
     void equalsReturnsTrueForSameProxy() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         assertTrue(proxy.equals(proxy));
     }
 
     @Test
     void equalsReturnsFalseForDifferentProxy() {
-        TestConfigProxy proxy1 = ConfigGenerator.newInstance(TestConfigProxy.class, config);
-        TestConfigProxy proxy2 = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+        MyConfig proxy1 = ConfigGenerator.newInstance(MyConfig.class, config);
+        MyConfig proxy2 = ConfigGenerator.newInstance(MyConfig.class, config);
         assertFalse(proxy1.equals(proxy2));
     }
 
     @Test
     void addDefaultSetsDefaultsInConfig() {
-        ConfigGenerator.newInstance(TestConfigProxy.class, config, true, false, true);
-        assertEquals("default", config.node("name").get());
-        assertEquals(42, config.node("port").get());
-        assertEquals(true, config.node("enabled").get());
+        ConfigGenerator.newInstance(MyConfig.class, config, true, false, true);
+        assertEquals("default", config.node("name").get(String.class));
+        assertEquals(42L, config.node("port").get(Long.class));
+        assertEquals(true, config.node("enabled").get(Boolean.class));
     }
 
     @Test
-    void commentAnnotationSetsCommentOnFirstSetup() {
-        ConfigGenerator.newInstance(CommentedConfig.class, config, true, false, true);
-        List<String> comment = config.node("name").getComment();
-        assertEquals(Arrays.asList("This is the name"), comment);
+    void addDefaultSetsDefaultsInNestedSubConfig() {
+        ConfigGenerator.newInstance(DeepConfig.class, config, true, false, true);
+
+        System.out.println("Config: " + config.getOriginal());
+        System.out.println("middle exists: " + config.node("middle").exists());
+        System.out.println("middle.value exists: " + config.node("middle", "value").exists());
+
+        assertEquals("defaultMiddle", config.node("middle", "value").get(String.class));
+        assertEquals("defaultInner", config.node("middle", "inner", "value").get(String.class));
     }
 
     @Test
     void nestedPathWorksCorrectly() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config, true, false, true);
-        assertEquals("nestedDefault", proxy.getNestedValue());
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config, true, false, true);
+        assertEquals("nestedDefault", proxy.nestedValue());
         config.node("server", "name").set("customNested");
-        assertEquals("customNested", proxy.getNestedValue());
+        assertEquals("customNested", proxy.nestedValue());
     }
 
     @Test
     void defaultVoidMethodWithNonConfigPathExecutesDefaultBody() {
-        TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
         assertDoesNotThrow(proxy::unknownMethod);
     }
 
     @Test
     void stickyValueReturnsCachedValue() {
         StickyConfig proxy = ConfigGenerator.newInstance(StickyConfig.class, config, true, true, true);
-        assertEquals("sticky", proxy.getStickyValue());
+        assertEquals("sticky", proxy.stickyValue());
         config.node("value").set("changed");
-        assertEquals("sticky", proxy.getStickyValue());
+        assertEquals("sticky", proxy.stickyValue());
     }
 
     @Test
     void nonStickyValueReturnsLatestValue() {
         NonStickyConfig proxy = ConfigGenerator.newInstance(NonStickyConfig.class, config, true, false, true);
-        assertEquals("nonSticky", proxy.getNonStickyValue());
+        assertEquals("nonSticky", proxy.nonStickyValue());
         config.node("value").set("changed");
-        assertEquals("changed", proxy.getNonStickyValue());
+        assertEquals("changed", proxy.nonStickyValue());
     }
 
     @Test
     void reloadClearsStickyCache() {
         StickyConfig proxy = ConfigGenerator.newInstance(StickyConfig.class, config, true, true, true);
-        assertEquals("sticky", proxy.getStickyValue());
+        assertEquals("sticky", proxy.stickyValue());
         config.node("value").set("changed");
+        config.save();
         proxy.reloadConfig();
-        assertEquals("changed", proxy.getStickyValue());
+        assertEquals("changed", proxy.stickyValue());
     }
 
     @Test
     void setupConfigIsCalledWhenTrue() {
-        ConfigGenerator.newInstance(TestConfigProxy.class, config, true);
-        assertTrue(config.setupCalled);
+        File file = tempDir.resolve("setup" + System.nanoTime() + ".json").toFile();
+        GsonConfig newConfig = new GsonConfig(file);
+        ConfigGenerator.newInstance(MyConfig.class, newConfig, true);
+        assertTrue(file.exists());
     }
 
     @Test
-    void setupConfigIsNotCalledWhenFalse() {
-        ConfigGenerator.newInstance(TestConfigProxy.class, config, false);
-        assertFalse(config.setupCalled);
+    void subConfigReturnsProxiedChildNode() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config, true, false, true);
+        ServerConfig server = proxy.server();
+
+        assertNotNull(server);
+        assertTrue(server instanceof ServerConfig);
+
+        assertEquals("localhost", server.host());
+        assertEquals("A Server", server.motd());
     }
 
-    public interface TestConfigProxy {
-        @ConfigPath({"name"})
+    @Test
+    void subConfigReadsFromCorrectPath() {
+        config.node("server", "host").set("192.168.1.1");
+        config.node("server", "motd").set("Custom Server");
+
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        ServerConfig server = proxy.server();
+
+        assertEquals("192.168.1.1", server.host());
+        assertEquals("Custom Server", server.motd());
+    }
+
+    @Test
+    void subConfigSetWritesToCorrectPath() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        ServerConfig server = proxy.server();
+
+        server.host("10.0.0.1");
+        server.motd("My Server");
+
+        assertEquals("10.0.0.1", config.node("server", "host").get(String.class));
+        assertEquals("My Server", config.node("server", "motd").get(String.class));
+    }
+
+    @Test
+    void subConfigReturnsSameProxyInstance() {
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        ServerConfig server1 = proxy.server();
+        ServerConfig server2 = proxy.server();
+        assertSame(server1, server2);
+    }
+
+    @Test
+    void nestedSubConfigWorks() {
+        config.node("middle", "value").set("defaultMiddle");
+        config.node("middle", "inner", "value").set("defaultInner");
+
+        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config, true, false, true);
+        MiddleConfig middle = proxy.middle();
+
+        assertNotNull(middle);
+        assertEquals("defaultMiddle", middle.value());
+
+        InnerConfig inner = middle.inner();
+        assertNotNull(inner);
+        assertEquals("defaultInner", inner.value());
+    }
+
+    @Test
+    void nestedSubConfigReadsFromCorrectPath() {
+        config.node("middle", "inner", "value").set("deepValue");
+
+        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config);
+        MiddleConfig middle = proxy.middle();
+        InnerConfig inner = middle.inner();
+
+        assertEquals("deepValue", inner.value());
+    }
+
+    @Test
+    void nestedSubConfigSetWritesToCorrectPath() {
+        config.node("middle", "inner", "value").set("initial");
+
+        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config);
+        MiddleConfig middle = proxy.middle();
+        InnerConfig inner = middle.inner();
+
+        inner.value("newValue");
+
+        assertEquals("newValue", config.node("middle", "inner", "value").get(String.class));
+    }
+
+    // === Test Interfaces ===
+
+    @Test
+    void converterConvertsValueOnGet() {
+        config.node("number").set("3.14");
+        ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
+        assertEquals(3.14, proxy.number().doubleValue(), 0.001);
+    }
+
+    @Test
+    void converterConvertsValueOnSet() {
+        ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
+        proxy.number(42);
+        assertEquals("42", config.node("number").get(String.class));
+    }
+
+    @Test
+    void converterWithDefaultValue() {
+        ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config, true, false, true);
+        assertEquals(42.0, proxy.number().doubleValue(), 0.001);
+    }
+
+    @Test
+    void converterWithCustomConverter() {
+        config.node("date").set(1234567890L);
+        ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
+        assertEquals(1234567890L, proxy.date());
+    }
+
+    @Test
+    void converterSetAndGetRoundTrip() {
+        ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
+        proxy.number(99.9);
+        assertEquals(99.9, proxy.number().doubleValue(), 0.001);
+    }
+
+    @ConfigNode
+    public interface MyConfig {
+        @ConfigPath("name")
+        default String name() {
+            return "default";
+        }
+
+        void name(String value);
+
+        @ConfigPath("port")
+        default int port() {
+            return 42;
+        }
+
+        @ConfigPath("enabled")
+        default boolean enabled() {
+            return true;
+        }
+
+        @ConfigPath("name")
         default String getName() {
             return "default";
         }
 
         void setName(String name);
 
-        @ConfigPath({"port"})
-        default int getPort() {
-            return 42;
-        }
-
-        @ConfigPath({"enabled"})
+        @ConfigPath("enabled")
         default boolean isEnabled() {
             return true;
         }
 
-        @ConfigPath({"debug"})
-        default boolean isDebug() {
-            return false;
-        }
-
         @ConfigPath({"server", "name"})
-        default String getNestedValue() {
+        default String nestedValue() {
             return "nestedDefault";
         }
+
+        @ConfigPath("server")
+        ServerConfig server();
 
         Config getConfig();
 
@@ -220,242 +372,129 @@ class ConfigGeneratorTest {
         }
     }
 
-    public interface CommentedConfig {
-        @ConfigPath({"name"})
-        @Comment("This is the name")
-        default String getName() {
-            return "default";
+    @ConfigNode
+    public interface ServerConfig {
+        @ConfigPath("host")
+        default String host() {
+            return "localhost";
         }
 
-        void setName(String name);
+        void host(String value);
+
+        @ConfigPath("motd")
+        default String motd() {
+            return "A Server";
+        }
+
+        void motd(String value);
     }
 
+    @ConfigNode
     public interface StickyConfig {
-        @ConfigPath({"value"})
+        @ConfigPath("value")
         @StickyValue
-        default String getStickyValue() {
+        default String stickyValue() {
             return "sticky";
         }
 
-        void setStickyValue(String value);
+        void stickyValue(String value);
 
         void reloadConfig();
     }
 
+    @ConfigNode
     public interface NonStickyConfig {
-        @ConfigPath({"value"})
-        default String getNonStickyValue() {
+        @ConfigPath("value")
+        default String nonStickyValue() {
             return "nonSticky";
         }
 
-        void setNonStickyValue(String value);
+        void nonStickyValue(String value);
     }
 
-    public static class SimpleMapConfig implements Config {
-        private final Map<String, Object> data = new HashMap<>();
-        private final Map<String, List<String>> comments = new HashMap<>();
-        boolean saved = false;
-        boolean reloaded = false;
-        boolean setupCalled = false;
-        private List<String> classComment = Collections.emptyList();
+    @ConfigNode
+    public interface DeepConfig {
+        @ConfigPath("middle")
+        MiddleConfig middle();
+    }
 
-        private static String joinPath(String... path) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < path.length; i++) {
-                if (i > 0) sb.append('\0');
-                sb.append(path[i]);
+    @ConfigNode
+    public interface MiddleConfig {
+        @ConfigPath("value")
+        default String value() {
+            return "defaultMiddle";
+        }
+
+        void value(String value);
+
+        @ConfigPath("inner")
+        InnerConfig inner();
+    }
+
+    @ConfigNode
+    public interface InnerConfig {
+        @ConfigPath("value")
+        default String value() {
+            return "defaultInner";
+        }
+
+        void value(String value);
+    }
+
+    @ConfigNode
+    public interface ConverterConfig {
+        @ConfigPath(value = "date", converter = LongToDateConverter.class)
+        default long date() {
+            return System.currentTimeMillis();
+        }
+
+        void date(long timestamp);
+
+        @ConfigPath(value = "number", converter = StringToNumberConverter.class)
+        default Number number() {
+            return 42;
+        }
+
+        void number(Number value);
+    }
+
+    public static class LongToDateConverter implements Converter {
+        @Override
+        public Object convert(Object raw) {
+            if (raw instanceof Number) {
+                return ((Number) raw).longValue();
             }
-            return sb.toString();
+            return raw;
         }
 
         @Override
-        public Object getOriginal() {
-            return data;
-        }
-
-        @Override
-        public String getName() {
-            return "test-config";
-        }
-
-        @Override
-        public ConfigNode node(String... path) {
-            return new SimpleConfigNode(this, path);
-        }
-
-        @Override
-        public Object get() {
-            return null;
-        }
-
-        @Override
-        public void set(Object value) {
-        }
-
-        @Override
-        public void remove() {
-            data.clear();
-        }
-
-        @Override
-        public Map<String, ConfigNode> getChildren() {
-            Map<String, ConfigNode> result = new LinkedHashMap<>();
-            for (String key : data.keySet()) {
-                String[] parts = key.split("\0", -1);
-                result.put(parts[parts.length - 1], new SimpleConfigNode(this, parts));
+        public Object convertToRaw(Object value) {
+            if (value instanceof Long) {
+                return value;
             }
-            return result;
+            return value;
         }
+    }
 
+    public static class StringToNumberConverter implements Converter {
         @Override
-        public void setup() {
-            setupCalled = true;
-        }
-
-        @Override
-        public void save() {
-            saved = true;
-        }
-
-        @Override
-        public void reload() {
-            reloaded = true;
-        }
-
-        @Override
-        public Object normalize(Object object) {
-            return object;
-        }
-
-        @Override
-        public boolean isNormalizable(Object object) {
-            return false;
-        }
-
-        @Override
-        public List<String> getComment(CommentType type) {
-            return type == CommentType.BLOCK ? classComment : Collections.emptyList();
-        }
-
-        @Override
-        public void setComment(CommentType type, List<String> value) {
-            if (type == CommentType.BLOCK) {
-                classComment = value != null ? value : Collections.emptyList();
-            }
-        }
-
-        private static class SimpleConfigNode implements ConfigNode {
-            private final SimpleMapConfig config;
-            private final String[] path;
-            private final ConfigNode parent;
-
-            SimpleConfigNode(SimpleMapConfig config, String[] path) {
-                this(config, path, null);
-            }
-
-            SimpleConfigNode(SimpleMapConfig config, String[] path, ConfigNode parent) {
-                this.config = config;
-                this.path = path;
-                this.parent = parent;
-            }
-
-            private static String joinPath(String... path) {
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < path.length; i++) {
-                    if (i > 0) sb.append('\0');
-                    sb.append(path[i]);
-                }
-                return sb.toString();
-            }
-
-            @Override
-            public String[] getPath() {
-                return path;
-            }
-
-            @Override
-            public ConfigNode getParent() {
-                return parent;
-            }
-
-            @Override
-            public Config getConfig() {
-                return config;
-            }
-
-            @Override
-            public Object get() {
-                return config.data.getOrDefault(joinPath(path), null);
-            }
-
-            @Override
-            public void set(Object value) {
-                String key = joinPath(path);
-                if (value == null) {
-                    config.data.remove(key);
-                } else {
-                    config.data.put(key, value);
+        public Object convert(Object raw) {
+            if (raw instanceof String) {
+                try {
+                    return Double.parseDouble((String) raw);
+                } catch (NumberFormatException e) {
+                    return null;
                 }
             }
+            return raw;
+        }
 
-            @Override
-            public ConfigNode node(String... childPath) {
-                String[] fullPath = new String[path.length + childPath.length];
-                System.arraycopy(path, 0, fullPath, 0, path.length);
-                System.arraycopy(childPath, 0, fullPath, path.length, childPath.length);
-                return new SimpleConfigNode(config, fullPath, this);
+        @Override
+        public Object convertToRaw(Object value) {
+            if (value instanceof Number) {
+                return String.valueOf(value);
             }
-
-            @Override
-            public boolean exists() {
-                return config.data.containsKey(joinPath(path));
-            }
-
-            @Override
-            public void remove() {
-                config.data.remove(joinPath(path));
-            }
-
-            @Override
-            public boolean hasChild() {
-                return !getChildren().isEmpty();
-            }
-
-            @Override
-            public Map<String, ConfigNode> getChildren() {
-                Map<String, ConfigNode> result = new LinkedHashMap<>();
-                String prefix = joinPath(path);
-                for (String key : config.data.keySet()) {
-                    if (key.startsWith(prefix) && !key.equals(prefix)) {
-                        String[] parts = key.split("\0", -1);
-                        if (parts.length == path.length + 1) {
-                            result.put(parts[parts.length - 1], new SimpleConfigNode(config, parts));
-                        }
-                    }
-                }
-                return result;
-            }
-
-            @Override
-            public Object getNormalized() {
-                return get();
-            }
-
-            @Override
-            public List<String> getComment(CommentType type) {
-                return config.comments.getOrDefault(joinPath(path), Collections.emptyList());
-            }
-
-            @Override
-            public void setComment(CommentType type, List<String> value) {
-                if (path.length == 0) {
-                    config.setComment(type, value);
-                } else {
-                    if (value != null) {
-                        config.comments.put(joinPath(path), value);
-                    }
-                }
-            }
+            return value;
         }
     }
 }

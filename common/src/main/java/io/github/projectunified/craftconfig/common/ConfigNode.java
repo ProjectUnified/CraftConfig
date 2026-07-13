@@ -70,6 +70,7 @@ public interface ConfigNode {
      * @param <T>  the type
      * @return the typed value, or the default if not present or not assignable
      */
+    @SuppressWarnings("unchecked")
     default <T> T get(Class<T> type, T def) {
         Object value = getNormalized();
         if (value == null) {
@@ -77,6 +78,25 @@ public interface ConfigNode {
         }
         if (type == String.class) {
             return type.cast(String.valueOf(value));
+        }
+        if (value instanceof Number && Number.class.isAssignableFrom(type)) {
+            Number number = (Number) value;
+            if (type == Integer.class || type == int.class) {
+                return (T) Integer.valueOf(number.intValue());
+            } else if (type == Long.class || type == long.class) {
+                return (T) Long.valueOf(number.longValue());
+            } else if (type == Double.class || type == double.class) {
+                return (T) Double.valueOf(number.doubleValue());
+            } else if (type == Float.class || type == float.class) {
+                return (T) Float.valueOf(number.floatValue());
+            } else if (type == Short.class || type == short.class) {
+                return (T) Short.valueOf(number.shortValue());
+            } else if (type == Byte.class || type == byte.class) {
+                return (T) Byte.valueOf(number.byteValue());
+            }
+        }
+        if (value instanceof Boolean && (type == Boolean.class || type == boolean.class)) {
+            return type.cast(value);
         }
         return type.isInstance(value) ? type.cast(value) : def;
     }

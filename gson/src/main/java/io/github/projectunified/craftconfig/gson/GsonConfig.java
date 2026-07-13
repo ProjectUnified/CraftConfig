@@ -253,10 +253,6 @@ public class GsonConfig implements Config {
             if (path.length == 0) {
                 return this;
             }
-            Object value = get();
-            if (!(value instanceof JsonObject)) {
-                throw new IllegalStateException("The node is not a JSON object");
-            }
             String[] childAbsolutePath = concat(this.absolutePath, path);
             return new GsonConfigNode(path, this, childAbsolutePath);
         }

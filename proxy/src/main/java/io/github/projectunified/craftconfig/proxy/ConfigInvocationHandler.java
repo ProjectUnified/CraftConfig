@@ -3,156 +3,236 @@ package io.github.projectunified.craftconfig.proxy;
 import io.github.projectunified.craftconfig.annotation.Comment;
 import io.github.projectunified.craftconfig.annotation.ConfigPath;
 import io.github.projectunified.craftconfig.annotation.StickyValue;
+import io.github.projectunified.craftconfig.annotation.converter.Converter;
+import io.github.projectunified.craftconfig.annotation.converter.impl.DefaultConverter;
 import io.github.projectunified.craftconfig.annotation.converter.manager.DefaultConverterManager;
 import io.github.projectunified.craftconfig.common.Config;
-import io.github.projectunified.craftconfig.proxy.defaulthandler.DefaultMethodHandler;
-import io.github.projectunified.craftconfig.proxy.defaulthandler.NewJavaDefaultMethodHandler;
-import io.github.projectunified.craftconfig.proxy.defaulthandler.OldJavaDefaultMethodHandler;
+import io.github.projectunified.craftconfig.common.ConfigNode;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.*;
-import java.util.stream.Stream;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * The internal invocation handler to map the interface to the config
- */
 public class ConfigInvocationHandler<T> implements InvocationHandler {
-    private static final DefaultMethodHandler DEFAULT_METHOD_HANDLER;
+    private static final DefaultMethodHandler DEFAULT_METHOD_HANDLER = new DefaultMethodHandler();
 
-    static {
-        final float version = Float.parseFloat(System.getProperty("java.class.version"));
-        if (version <= 52) {
-            DEFAULT_METHOD_HANDLER = new OldJavaDefaultMethodHandler();
-        } else {
-            DEFAULT_METHOD_HANDLER = new NewJavaDefaultMethodHandler();
-        }
-    }
-
-    private final Map<String, MethodConfigNode> nodes = new HashMap<>();
     private final Class<T> clazz;
-    private final Config config;
+    private final ConfigNode node;
     private final boolean stickyValue;
+    private final Map<List<String>, Object> subProxies = new ConcurrentHashMap<>();
+    private final Map<List<String>, Object> cachedValues = new ConcurrentHashMap<>();
+    private final Set<List<String>> stickyKeys = new HashSet<>();
 
-    ConfigInvocationHandler(Class<T> clazz, Config config, boolean stickyValue, boolean addDefault) {
+    ConfigInvocationHandler(Class<T> clazz, ConfigNode node, boolean stickyValue, boolean addDefault) {
         this.clazz = clazz;
-        this.config = config;
+        this.node = node;
         this.stickyValue = stickyValue;
-
-        Stream<MethodConfigNode> configNodes = Arrays.stream(this.clazz.getDeclaredMethods())
-                .sorted(ConfigInvocationHandler::compareMethod)
-                .flatMap(method -> this.setupMethod(method).map(Stream::of).orElseGet(Stream::empty));
-
         if (addDefault) {
-            configNodes.forEach(MethodConfigNode::addDefault);
-            this.setupClassComment();
-            this.config.save();
+            setupDefaults();
         }
     }
 
-    private static String extractMethodName(String name) {
-        if (name.startsWith("get")) return name.substring(3);
-        if (name.startsWith("is")) return name.substring(2);
-        return name;
-    }
+    private void setupDefaults() {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (!method.isAnnotationPresent(ConfigPath.class)) continue;
+            if (method.getParameterCount() != 0) continue;
+            if (method.getReturnType() == void.class || method.getReturnType() == Void.class) continue;
 
-    private static int compareMethod(Method method1, Method method2) {
-        boolean annotated1 = method1.isAnnotationPresent(ConfigPath.class);
-        boolean annotated2 = method2.isAnnotationPresent(ConfigPath.class);
-        if (!annotated1 && !annotated2) return 0;
-        if (!annotated1) return 1;
-        if (!annotated2) return -1;
-        ConfigPath configPath1 = method1.getAnnotation(ConfigPath.class);
-        ConfigPath configPath2 = method2.getAnnotation(ConfigPath.class);
-        return Integer.compare(configPath1.priority(), configPath2.priority());
-    }
+            String[] path = extractPath(method);
+            if (path == null) continue;
 
-    private static boolean isPrimitiveOrWrapper(Class<?> clazz) {
-        return clazz.isPrimitive() || clazz.isAssignableFrom(Boolean.class) || clazz.isAssignableFrom(Byte.class)
-                || clazz.isAssignableFrom(Character.class) || clazz.isAssignableFrom(Short.class)
-                || clazz.isAssignableFrom(Integer.class) || clazz.isAssignableFrom(Long.class)
-                || clazz.isAssignableFrom(Float.class) || clazz.isAssignableFrom(Double.class);
-    }
+            if (isConfigInterface(method.getReturnType())) {
+                ConfigNode childNode = node.node(path);
+                new ConfigInvocationHandler<>(method.getReturnType(), childNode, stickyValue, true);
+                continue;
+            }
 
-    private static boolean isVoidMethod(Method method) {
-        return method.getReturnType() == void.class || method.getReturnType() == Void.class;
-    }
+            ConfigPath configPath = method.getAnnotation(ConfigPath.class);
+            Converter converter = DefaultConverterManager.getConverterIfDefault(
+                    method.getGenericReturnType(), configPath.converter());
 
-    private void setupClassComment() {
-        if (clazz.isAnnotationPresent(Comment.class) && config.getComment().isEmpty()) {
-            config.setComment(Arrays.asList(clazz.getAnnotation(Comment.class).value()));
-        }
-    }
+            Object defaultValue = invokeDefaultMethod(method);
+            ConfigNode childNode = node.node(path);
 
-    private Optional<MethodConfigNode> setupMethod(Method method) {
-        if (!method.isDefault() || method.getParameterCount() != 0) {
-            return Optional.empty();
-        }
+            if (!childNode.exists()) {
+                childNode.set(converter.convertToRaw(defaultValue));
+            }
 
-        String methodName = extractMethodName(method.getName());
-        if (methodName.isEmpty()) {
-            return Optional.empty();
+            if (method.isAnnotationPresent(Comment.class)) {
+                String[] comment = method.getAnnotation(Comment.class).value();
+                if (childNode.getComment().isEmpty()) {
+                    childNode.setComment(Arrays.asList(comment));
+                }
+            }
+
+            if (stickyValue || method.isAnnotationPresent(StickyValue.class)) {
+                stickyKeys.add(Arrays.asList(path));
+            }
         }
 
-        if (!method.isAnnotationPresent(ConfigPath.class)) {
-            return Optional.empty();
+        if (clazz.isAnnotationPresent(Comment.class) && node.getComment().isEmpty()) {
+            node.setComment(Arrays.asList(clazz.getAnnotation(Comment.class).value()));
         }
-        ConfigPath configPath = method.getAnnotation(ConfigPath.class);
-        String[] path = configPath.value();
 
-        try {
-            Object value = DEFAULT_METHOD_HANDLER.invoke(method);
-            MethodConfigNode node = new MethodConfigNode(
-                    path, config, DefaultConverterManager.getConverterIfDefault(method.getGenericReturnType(), configPath.converter()), value,
-                    method.isAnnotationPresent(Comment.class) ? Arrays.asList(method.getAnnotation(Comment.class).value()) : Collections.emptyList(),
-                    stickyValue || method.isAnnotationPresent(StickyValue.class)
-            );
-            nodes.put(methodName, node);
-            return Optional.of(node);
-        } catch (Throwable e) {
-            throw new IllegalStateException("Failed to setup method " + method.getName(), e);
+        if (node instanceof Config) {
+            ((Config) node).save();
         }
     }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         String name = method.getName();
-        if ((name.equals("getConfig") || name.equals("config")) && !method.isDefault() && method.getParameterCount() == 0 && method.getReturnType().isInstance(config)) {
-            return config;
-        } else if (name.equals("toString")) {
-            return this.clazz.toString();
-        } else if (name.equals("hashCode")) {
-            return this.clazz.hashCode();
-        } else if (name.equals("equals")) {
-            return proxy == args[0];
-        } else if ((name.equals("reloadConfig") || name.equals("reload")) && !method.isDefault() && method.getParameterCount() == 0) {
-            config.reload();
-            nodes.values().forEach(MethodConfigNode::clearCache);
-            return null;
-        } else if (!isVoidMethod(method) && method.isDefault() && method.getParameterCount() == 0 && method.isAnnotationPresent(ConfigPath.class)) {
-            String methodName = extractMethodName(name);
-            if (nodes.containsKey(methodName)) {
-                Object value = nodes.get(methodName).getValue();
-                if ((isPrimitiveOrWrapper(method.getReturnType()) && isPrimitiveOrWrapper(value.getClass())) || method.getReturnType().isInstance(value)) {
-                    return value;
-                }
-            }
-        } else if (isVoidMethod(method) && !method.isDefault() && method.getParameterCount() == 1) {
-            String methodName;
-            if (name.startsWith("set")) {
-                methodName = name.substring(3);
-            } else {
-                methodName = name;
-            }
-            if (nodes.containsKey(methodName)) {
-                nodes.get(methodName).setValue(args[0]);
-                config.save();
-                return null;
+
+        if (name.equals("getConfig") || name.equals("config")) {
+            if (method.getReturnType().isInstance(node.getConfig())) {
+                return node.getConfig();
             }
         }
+        if (name.equals("toString")) return clazz.toString();
+        if (name.equals("hashCode")) return clazz.hashCode();
+        if (name.equals("equals")) return proxy == args[0];
+
+        if ((name.equals("reloadConfig") || name.equals("reload"))
+                && method.getParameterCount() == 0 && method.getReturnType() == void.class) {
+            if (node instanceof Config) {
+                ((Config) node).reload();
+            }
+            cachedValues.clear();
+            subProxies.clear();
+            return null;
+        }
+
+        if (method.getParameterCount() == 0 && method.getReturnType() != void.class) {
+            return handleGetter(method);
+        }
+
+        if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
+            return handleSetter(method, args[0]);
+        }
+
         if (method.isDefault()) {
             return DEFAULT_METHOD_HANDLER.invoke(proxy, method, args);
         }
-        throw new UnsupportedOperationException("Method " + method.getName() + " is not supported");
+
+        throw new UnsupportedOperationException("Method " + name + " is not supported");
+    }
+
+    private Object handleGetter(Method method) {
+        String[] path = extractPath(method);
+        if (path == null && method.isDefault()) {
+            return invokeDefaultMethod(method);
+        }
+        if (path == null) {
+            throw new UnsupportedOperationException("Method " + method.getName() + " has no @ConfigPath");
+        }
+
+        if (isConfigInterface(method.getReturnType())) {
+            return getSubProxy(path, method.getReturnType());
+        }
+
+        List<String> pathKey = Arrays.asList(path);
+        if (stickyKeys.contains(pathKey) && cachedValues.containsKey(pathKey)) {
+            return cachedValues.get(pathKey);
+        }
+
+        ConfigPath configPath = method.getAnnotation(ConfigPath.class);
+        Converter converter = DefaultConverterManager.getConverterIfDefault(
+                method.getGenericReturnType(),
+                configPath != null ? configPath.converter() : DefaultConverter.class);
+
+        Object rawValue = node.node(path).getNormalized();
+        Object value = converter.convert(rawValue);
+        Object result = value != null ? value : invokeDefaultMethod(method);
+
+        if (stickyKeys.contains(pathKey)) {
+            cachedValues.put(pathKey, result);
+        }
+
+        return result;
+    }
+
+    private Object handleSetter(Method method, Object value) {
+        String[] path = findSetterPath(method);
+        if (path == null) {
+            throw new UnsupportedOperationException("Method " + method.getName() + " has no @ConfigPath");
+        }
+
+        ConfigPath configPath = method.getAnnotation(ConfigPath.class);
+        Converter converter = DefaultConverterManager.getConverterIfDefault(
+                method.getParameterTypes()[0],
+                configPath != null ? configPath.converter() : DefaultConverter.class);
+
+        node.node(path).set(converter.convertToRaw(value));
+        cachedValues.remove(Arrays.asList(path));
+
+        if (node instanceof Config) {
+            ((Config) node).save();
+        }
+
+        return null;
+    }
+
+    private String[] extractPath(Method method) {
+        ConfigPath configPath = method.getAnnotation(ConfigPath.class);
+        return configPath != null ? configPath.value() : null;
+    }
+
+    private String[] findSetterPath(Method setterMethod) {
+        String setterName = setterMethod.getName();
+        String baseName = stripPrefix(setterName);
+        if (baseName == null) baseName = setterName;
+
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.equals(setterMethod)) continue;
+            if (method.getParameterCount() != 0) continue;
+            if (method.getReturnType() == void.class) continue;
+
+            String methodName = method.getName();
+            String stripped = stripPrefix(methodName);
+            String nameWithoutPrefix = stripped != null ? stripped : methodName;
+
+            if (nameWithoutPrefix.equalsIgnoreCase(baseName)) {
+                String[] path = extractPath(method);
+                if (path != null) return path;
+            }
+        }
+
+        return null;
+    }
+
+    private String stripPrefix(String name) {
+        for (String[] prefix : new String[][]{{"get", "3"}, {"is", "2"}, {"set", "3"}}) {
+            if (name.startsWith(prefix[0]) && name.length() > Integer.parseInt(prefix[1])) {
+                int i = Integer.parseInt(prefix[1]);
+                return Character.toLowerCase(name.charAt(i)) + name.substring(i + 1);
+            }
+        }
+        return null;
+    }
+
+    private Object invokeDefaultMethod(Method method) {
+        try {
+            return DEFAULT_METHOD_HANDLER.invoke(method);
+        } catch (Throwable e) {
+            throw new IllegalStateException("Failed to invoke default method: " + method.getName(), e);
+        }
+    }
+
+    private boolean isConfigInterface(Class<?> type) {
+        return type.isAnnotationPresent(io.github.projectunified.craftconfig.annotation.ConfigNode.class)
+                && !type.equals(Config.class)
+                && !type.equals(ConfigNode.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <S> S getSubProxy(String[] path, Class<S> subInterface) {
+        List<String> pathKey = Arrays.asList(path);
+        return (S) subProxies.computeIfAbsent(pathKey, key ->
+                Proxy.newProxyInstance(
+                        subInterface.getClassLoader(),
+                        new Class[]{subInterface},
+                        new ConfigInvocationHandler<>(subInterface, node.node(path), stickyValue, false)));
     }
 }

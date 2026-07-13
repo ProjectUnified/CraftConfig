@@ -24,6 +24,9 @@ public final class ConfigGenerator {
      * @return The new instance
      */
     public static <T> T newInstance(Class<T> clazz, Config config, boolean setupConfig, boolean stickyValue, boolean addDefault) {
+        if (!clazz.isAnnotationPresent(io.github.projectunified.craftconfig.annotation.ConfigNode.class)) {
+            throw new IllegalArgumentException("The class " + clazz.getName() + " must be annotated with @ConfigNode");
+        }
         if (setupConfig) {
             config.setup();
         }
