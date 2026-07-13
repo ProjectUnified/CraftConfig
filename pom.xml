@@ -5,11 +5,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.github.projectunified</groupId>
-    <artifactId>MavenTemplate</artifactId>
+    <artifactId>craftconfig</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
-    <name>MavenTemplate</name>
-    <description>A template for ProjectUnified's projects</description>
+    <name>CraftConfig</name>
+    <description>A config library</description>
     <url>https://github.com/ProjectUnified/${project.name}</url>
 
     <licenses>
@@ -38,10 +39,107 @@
         <url>https://github.com/ProjectUnified/${project.name}</url>
     </scm>
 
+    <modules>
+        <module>gson-util</module>
+        <module>common</module>
+        <module>annotation</module>
+        <module>annotated</module>
+        <module>proxy</module>
+        <module>gson</module>
+        <module>configurate</module>
+        <module>bukkit</module>
+        <module>bukkit-converter</module>
+        <module>bungeecord</module>
+    </modules>
+
     <properties>
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <gson.version>2.14.0</gson.version>
+        <configurate.version>4.2.0</configurate.version>
+        <annotations.version>26.1.0</annotations.version>
+        <spigot.version>1.18.2-R0.1-20220607.160742-53</spigot.version>
+        <bungeecord.version>1.21-R0.4</bungeecord.version>
+        <junit.version>5.10.2</junit.version>
+        <mockito.version>5.10.0</mockito.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>io.github.projectunified</groupId>
+                <artifactId>craftconfig-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.projectunified</groupId>
+                <artifactId>craftconfig-annotation</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.projectunified</groupId>
+                <artifactId>craftconfig-gson-util</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- External dependencies -->
+            <dependency>
+                <groupId>com.google.code.gson</groupId>
+                <artifactId>gson</artifactId>
+                <version>${gson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.spongepowered</groupId>
+                <artifactId>configurate-core</artifactId>
+                <version>${configurate.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.spongepowered</groupId>
+                <artifactId>configurate-yaml</artifactId>
+                <version>${configurate.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains</groupId>
+                <artifactId>annotations</artifactId>
+                <version>${annotations.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.spigotmc</groupId>
+                <artifactId>spigot-api</artifactId>
+                <version>${spigot.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>net.md-5</groupId>
+                <artifactId>bungeecord-api</artifactId>
+                <version>${bungeecord.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!-- Test dependencies -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>
@@ -50,6 +148,8 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <testSource>11</testSource>
+                    <testTarget>11</testTarget>
                 </configuration>
                 <groupId>org.apache.maven.plugins</groupId>
                 <version>3.15.0</version>
@@ -83,6 +183,11 @@
                     <outputDirectory>${project.build.directory}/reports</outputDirectory>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
         </plugins>
     </build>
 
@@ -103,7 +208,6 @@
                                     <goal>sign</goal>
                                 </goals>
                                 <configuration>
-                                    <!-- Prevent `gpg` from using pinentry programs -->
                                     <gpgArguments>
                                         <arg>--pinentry-mode</arg>
                                         <arg>loopback</arg>
@@ -127,4 +231,15 @@
             </build>
         </profile>
     </profiles>
+
+    <repositories>
+        <repository>
+            <id>spigot-repo</id>
+            <url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>bungeecord-repo</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+        </repository>
+    </repositories>
 </project>
