@@ -62,7 +62,7 @@
         <annotations.version>26.1.0</annotations.version>
         <spigot.version>1.18.2-R0.1-20220607.160742-53</spigot.version>
         <bungeecord.version>1.21-R0.4</bungeecord.version>
-        <junit.version>5.10.2</junit.version>
+        <junit.version>6.1.2</junit.version>
         <mockito.version>5.23.0</mockito.version>
     </properties>
 
