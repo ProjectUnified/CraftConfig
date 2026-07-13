@@ -1,0 +1,13 @@
+io.github.projectunified.craftconfig.annotation
+io.github.projectunified.craftconfig.annotation.converter
+io.github.projectunified.craftconfig.annotation.converter.impl
+io.github.projectunified.craftconfig.annotation.converter.manager
+io.github.projectunified.craftconfig.bukkit
+io.github.projectunified.craftconfig.bukkit.converter
+io.github.projectunified.craftconfig.bungeecord
+io.github.projectunified.craftconfig.common
+io.github.projectunified.craftconfig.configurate
+io.github.projectunified.craftconfig.example
+io.github.projectunified.craftconfig.gson
+io.github.projectunified.craftconfig.gson.util
+io.github.projectunified.craftconfig.proxy
