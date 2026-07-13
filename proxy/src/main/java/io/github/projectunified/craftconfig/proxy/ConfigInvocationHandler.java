@@ -34,6 +34,24 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         }
     }
 
+    private static List<Method> getAllDeclaredMethods(Class<?> clazz) {
+        Set<String> seen = new HashSet<>();
+        List<Method> result = new ArrayList<>();
+        Deque<Class<?>> queue = new ArrayDeque<>();
+        queue.add(clazz);
+        while (!queue.isEmpty()) {
+            Class<?> current = queue.poll();
+            for (Method method : current.getDeclaredMethods()) {
+                String key = method.getName() + Arrays.toString(method.getParameterTypes());
+                if (seen.add(key)) {
+                    result.add(method);
+                }
+            }
+            Collections.addAll(queue, current.getInterfaces());
+        }
+        return result;
+    }
+
     private void setupDefaults() {
         for (Method method : getAllDeclaredMethods(clazz)) {
             if (!method.isAnnotationPresent(ConfigPath.class)) continue;
@@ -53,7 +71,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             Converter converter = DefaultConverterManager.getConverterIfDefault(
                     method.getGenericReturnType(), configPath.converter());
 
-            Object defaultValue = invokeDefaultMethod(method);
+            Object defaultValue = invokeDefaultMethod(null, method);
             ConfigNode childNode = node.node(path);
 
             if (!childNode.exists()) {
@@ -103,7 +121,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         }
 
         if (method.getParameterCount() == 0 && method.getReturnType() != void.class) {
-            return handleGetter(method);
+            return handleGetter(proxy, method);
         }
 
         if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
@@ -117,17 +135,18 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         throw new UnsupportedOperationException("Method " + name + " is not supported");
     }
 
-    private Object handleGetter(Method method) {
+    private Object handleGetter(Object proxy, Method method) {
         String[] path = extractPath(method);
         if (path == null && method.isDefault()) {
-            return invokeDefaultMethod(method);
+            return invokeDefaultMethod(proxy, method);
         }
         if (path == null) {
             throw new UnsupportedOperationException("Method " + method.getName() + " has no @ConfigPath");
         }
 
         if (isConfigInterface(method.getReturnType())) {
-            return getSubProxy(path, method.getReturnType());
+            ConfigNode childNode = node.node(path);
+            return getSubProxy(childNode, method.getReturnType());
         }
 
         List<String> pathKey = Arrays.asList(path);
@@ -142,7 +161,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
 
         Object rawValue = node.node(path).getNormalized();
         Object value = converter.convert(rawValue);
-        Object result = value != null ? value : invokeDefaultMethod(method);
+        Object result = value != null ? value : invokeDefaultMethod(proxy, method);
 
         if (stickyKeys.contains(pathKey)) {
             cachedValues.put(pathKey, result);
@@ -208,8 +227,11 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         return null;
     }
 
-    private Object invokeDefaultMethod(Method method) {
+    private Object invokeDefaultMethod(Object proxy, Method method) {
         try {
+            if (proxy != null) {
+                return DEFAULT_METHOD_HANDLER.invoke(proxy, method);
+            }
             return DEFAULT_METHOD_HANDLER.invoke(method);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to invoke default method: " + method.getName(), e);
@@ -222,31 +244,13 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
                 && !type.equals(ConfigNode.class);
     }
 
-    private static List<Method> getAllDeclaredMethods(Class<?> clazz) {
-        Set<String> seen = new HashSet<>();
-        List<Method> result = new ArrayList<>();
-        Deque<Class<?>> queue = new ArrayDeque<>();
-        queue.add(clazz);
-        while (!queue.isEmpty()) {
-            Class<?> current = queue.poll();
-            for (Method method : current.getDeclaredMethods()) {
-                String key = method.getName() + Arrays.toString(method.getParameterTypes());
-                if (seen.add(key)) {
-                    result.add(method);
-                }
-            }
-            Collections.addAll(queue, current.getInterfaces());
-        }
-        return result;
-    }
-
     @SuppressWarnings("unchecked")
-    private <S> S getSubProxy(String[] path, Class<S> subInterface) {
-        List<String> pathKey = Arrays.asList(path);
+    private <S> S getSubProxy(ConfigNode childNode, Class<S> subInterface) {
+        List<String> pathKey = Arrays.asList(childNode.getPath());
         return (S) subProxies.computeIfAbsent(pathKey, key ->
                 Proxy.newProxyInstance(
                         subInterface.getClassLoader(),
                         new Class[]{subInterface},
-                        new ConfigInvocationHandler<>(subInterface, node.node(path), stickyValue, false)));
+                        new ConfigInvocationHandler<>(subInterface, childNode, stickyValue, false)));
     }
 }

@@ -5,7 +5,6 @@ import io.github.projectunified.craftconfig.annotation.ConfigNode;
 import io.github.projectunified.craftconfig.annotation.ConfigPath;
 import io.github.projectunified.craftconfig.annotation.StickyValue;
 import io.github.projectunified.craftconfig.annotation.converter.Converter;
-import io.github.projectunified.craftconfig.common.CommentType;
 import io.github.projectunified.craftconfig.common.Config;
 import io.github.projectunified.craftconfig.configurate.ConfigurateConfig;
 import org.junit.jupiter.api.BeforeEach;
@@ -372,7 +371,36 @@ class ConfigGeneratorTest {
         assertEquals("existing-host", config.node("host").get(String.class));
     }
 
-    // === Converter Tests ===
+    // === Default Method Calling Sub-Config Tests ===
+
+    @Test
+    void defaultMethodCanCallSubConfigGetter() {
+        WithSubConfig proxy = ConfigGenerator.newInstance(WithSubConfig.class, config, true, false, true);
+        assertEquals("localhost", proxy.resolvedHost());
+        assertEquals("A Server", proxy.resolvedMotd());
+    }
+
+    @Test
+    void defaultMethodCallSubConfigGetterReadsConfigValues() {
+        config.node("server", "host").set("10.0.0.1");
+        config.node("server", "motd").set("Custom Server");
+
+        WithSubConfig proxy = ConfigGenerator.newInstance(WithSubConfig.class, config, false);
+        assertEquals("10.0.0.1", proxy.resolvedHost());
+        assertEquals("Custom Server", proxy.resolvedMotd());
+    }
+
+    @Test
+    void defaultMethodCallSubConfigGetterSetsValues() {
+        WithSubConfig proxy = ConfigGenerator.newInstance(WithSubConfig.class, config);
+        proxy.server().host("example.com");
+        proxy.server().motd("Hello");
+
+        assertEquals("example.com", config.node("server", "host").get(String.class));
+        assertEquals("Hello", config.node("server", "motd").get(String.class));
+        assertEquals("example.com", proxy.resolvedHost());
+        assertEquals("Hello", proxy.resolvedMotd());
+    }
 
     @Test
     void converterConvertsValueOnGet() {
@@ -380,6 +408,8 @@ class ConfigGeneratorTest {
         ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
         assertEquals(42.0, proxy.number().doubleValue(), 0.001);
     }
+
+    // === Converter Tests ===
 
     @Test
     void converterConvertsValueOnSet() {
@@ -399,6 +429,25 @@ class ConfigGeneratorTest {
         ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
         proxy.number(99);
         assertEquals(99.0, proxy.number().doubleValue(), 0.001);
+    }
+
+    @ConfigNode
+    public interface WithSubConfig {
+        @ConfigPath("server")
+        ServerConfig server();
+
+        @ConfigPath("name")
+        default String name() {
+            return "default";
+        }
+
+        default String resolvedHost() {
+            return server().host();
+        }
+
+        default String resolvedMotd() {
+            return server().motd();
+        }
     }
 
     @ConfigNode
