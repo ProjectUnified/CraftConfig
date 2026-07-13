@@ -10,20 +10,20 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 class DefaultMethodHandler {
-    private final Map<Method, MethodHandle> cache = new ConcurrentHashMap<>();
+    private static final Map<Method, MethodHandle> CACHE = new ConcurrentHashMap<>();
 
-    Object invoke(Object proxy, Method method, Object... args) throws Throwable {
-        MethodHandle handle = cache.computeIfAbsent(method, this::resolveHandle);
+    static Object invoke(Object proxy, Method method, Object... args) throws Throwable {
+        MethodHandle handle = CACHE.computeIfAbsent(method, DefaultMethodHandler::resolveHandle);
         return handle.bindTo(proxy).invokeWithArguments(args);
     }
 
-    Object invoke(Method method, Object... args) throws Throwable {
+    static Object invoke(Method method, Object... args) throws Throwable {
         Class<?> clazz = method.getDeclaringClass();
         Object proxy = Proxy.newProxyInstance(clazz.getClassLoader(), new Class[]{clazz}, (o, m, a) -> null);
         return invoke(proxy, method, args);
     }
 
-    private MethodHandle resolveHandle(Method method) {
+    private static MethodHandle resolveHandle(Method method) {
         try {
             return MethodHandles.lookup()
                     .findSpecial(
