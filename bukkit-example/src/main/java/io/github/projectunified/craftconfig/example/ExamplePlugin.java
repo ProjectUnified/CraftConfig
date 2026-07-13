@@ -205,13 +205,13 @@ public class ExamplePlugin extends JavaPlugin {
 
         getLogger().info("Server host: " + serverProxy.host());
         getLogger().info("Server port: " + serverProxy.port());
-        getLogger().info("Server motd: " + serverProxy.motd());
-        getLogger().info("Max players: " + serverProxy.maxPlayers());
+        getLogger().info("Server motd: " + serverProxy.meta().motd());
+        getLogger().info("Max players: " + serverProxy.meta().maxPlayers());
 
         serverProxy.host("play.example.com");
         serverProxy.port(25565);
-        serverProxy.motd("Welcome to Example Server!");
-        serverProxy.maxPlayers(100);
+        serverProxy.meta().motd("Welcome to Example Server!");
+        serverProxy.meta().maxPlayers(100);
 
         getLogger().info("Set back to original");
 
@@ -220,32 +220,38 @@ public class ExamplePlugin extends JavaPlugin {
 
     @io.github.projectunified.craftconfig.annotation.ConfigNode
     public interface ServerProxy {
-        @ConfigPath("server.host")
+        @ConfigPath({"server", "host"})
         default String host() {
             return "localhost";
         }
 
         void host(String value);
 
-        @ConfigPath("server.port")
+        @ConfigPath({"server", "port"})
         default int port() {
             return 25565;
         }
 
         void port(int value);
 
-        @ConfigPath("server.motd")
-        default String motd() {
-            return "A Minecraft Server";
+        @ConfigPath({"server", "meta"})
+        ServerMetaConfig meta();
+
+        @io.github.projectunified.craftconfig.annotation.ConfigNode
+        interface ServerMetaConfig {
+            @ConfigPath("motd")
+            default String motd() {
+                return "A Minecraft Server";
+            }
+
+            void motd(String value);
+
+            @ConfigPath("max-players")
+            default int maxPlayers() {
+                return 20;
+            }
+
+            void maxPlayers(int value);
         }
-
-        void motd(String value);
-
-        @ConfigPath("server.max-players")
-        default int maxPlayers() {
-            return 20;
-        }
-
-        void maxPlayers(int value);
     }
 }
