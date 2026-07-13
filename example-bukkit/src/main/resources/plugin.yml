@@ -1,0 +1,5 @@
+name: CraftConfigExample
+version: ${project.version}
+main: io.github.projectunified.craftconfig.example.ExamplePlugin
+api-version: '1.18'
+description: Example plugin demonstrating CraftConfig usage

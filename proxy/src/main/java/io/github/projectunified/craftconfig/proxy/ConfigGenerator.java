@@ -10,7 +10,6 @@ import java.lang.reflect.Proxy;
  */
 public final class ConfigGenerator {
     private ConfigGenerator() {
-        // EMPTY
     }
 
     /**

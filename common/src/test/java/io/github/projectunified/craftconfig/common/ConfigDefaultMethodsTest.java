@@ -3,7 +3,10 @@ package io.github.projectunified.craftconfig.common;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -18,180 +21,152 @@ class ConfigDefaultMethodsTest {
 
     @Test
     void containsTrue() {
-        config.set("value", "key1");
-        assertTrue(config.contains("key1"));
+        config.node("key1").set("value");
+        assertTrue(config.node("key1").exists());
     }
 
     @Test
     void containsFalse() {
-        assertFalse(config.contains("nonexistent"));
+        assertFalse(config.node("nonexistent").exists());
     }
 
     @Test
     void containsNestedTrue() {
-        config.set("value", "key1", "key2");
-        assertTrue(config.contains("key1", "key2"));
+        config.node("key1", "key2").set("value");
+        assertTrue(config.node("key1", "key2").exists());
     }
 
     @Test
     void containsNestedFalse() {
-        config.set("value", "key1");
-        assertFalse(config.contains("key1", "key2"));
+        config.node("key1").set("value");
+        assertFalse(config.node("key1", "key2").exists());
     }
 
     @Test
     void remove() {
-        config.set("value", "key1");
-        assertTrue(config.contains("key1"));
-        config.remove("key1");
-        assertFalse(config.contains("key1"));
+        config.node("key1").set("value");
+        assertTrue(config.node("key1").exists());
+        config.node("key1").remove();
+        assertFalse(config.node("key1").exists());
     }
 
     @Test
     void clear() {
-        config.set("a", "key1");
-        config.set("b", "key2");
-        assertTrue(config.contains("key1"));
-        assertTrue(config.contains("key2"));
-        config.clear();
-        assertFalse(config.contains("key1"));
-        assertFalse(config.contains("key2"));
+        config.node("key1").set("a");
+        config.node("key2").set("b");
+        assertTrue(config.node("key1").exists());
+        assertTrue(config.node("key2").exists());
+        config.remove();
+        assertFalse(config.node("key1").exists());
+        assertFalse(config.node("key2").exists());
     }
 
     @Test
     void getNormalizedWithDefault() {
-        config.set("hello", "key1");
+        config.node("key1").set("hello");
         Object def = "default";
-        assertEquals("hello", config.getNormalized(def, new String[]{"key1"}));
+        assertEquals("hello", config.node("key1").get(def));
     }
 
     @Test
     void getNormalizedNotFound() {
         Object def = "default";
-        assertEquals("default", config.getNormalized(def, new String[]{"nonexistent"}));
+        assertEquals("default", config.node("nonexistent").get(def));
     }
 
     @Test
     void getNormalizedNull() {
-        config.set("hello", "key1");
-        assertEquals("hello", config.getNormalized("key1"));
+        config.node("key1").set("hello");
+        assertEquals("hello", config.node("key1").getNormalized());
     }
 
     @Test
     void getTypeWithDefaultReturnsValue() {
-        config.set("hello", "key1");
-        assertEquals("hello", config.get(String.class, "default", new String[]{"key1"}));
+        config.node("key1").set("hello");
+        assertEquals("hello", config.node("key1").get(String.class, "default"));
     }
 
     @Test
     void getTypeWithDefaultReturnsDefault() {
-        assertEquals("default", config.get(String.class, "default", new String[]{"nonexistent"}));
+        assertEquals("default", config.node("nonexistent").get(String.class, "default"));
     }
 
     @Test
     void getTypeWithDefaultObjectClassReturnsRawValue() {
-        config.set("hello", "key1");
-        assertEquals("hello", config.get(Object.class, "default", new String[]{"key1"}));
+        config.node("key1").set("hello");
+        assertEquals("hello", config.node("key1").get(Object.class, "default"));
     }
 
     @Test
     void getTypeWithDefaultObjectClassReturnsDefaultWhenMissing() {
-        assertEquals("default", config.get(Object.class, "default", new String[]{"nonexistent"}));
+        assertEquals("default", config.node("nonexistent").get(Object.class, "default"));
     }
 
     @Test
     void getTypeWithDefaultStringConvertsToString() {
-        config.set(42, "key1");
-        assertEquals("42", config.get(String.class, "default", new String[]{"key1"}));
+        config.node("key1").set(42);
+        assertEquals("42", config.node("key1").get(String.class, "default"));
     }
 
     @Test
     void getTypeWithDefaultStringReturnsDefaultWhenNull() {
-        assertEquals("default", config.get(String.class, "default", new String[]{"nonexistent"}));
+        assertEquals("default", config.node("nonexistent").get(String.class, "default"));
     }
 
     @Test
     void getTypeWithDefaultReturnsDefaultForWrongType() {
-        config.set("hello", "key1");
-        assertEquals(Integer.valueOf(0), config.get(Integer.class, 0, new String[]{"key1"}));
+        config.node("key1").set("hello");
+        assertEquals(Integer.valueOf(0), config.node("key1").get(Integer.class, 0));
     }
 
     @Test
     void getTypeWithoutDefaultReturnsValue() {
-        config.set("hello", "key1");
-        assertEquals("hello", config.get(String.class, new String[]{"key1"}));
+        config.node("key1").set("hello");
+        assertEquals("hello", config.node("key1").get(String.class));
     }
 
     @Test
     void getTypeWithoutDefaultReturnsNull() {
-        assertNull(config.get(String.class, new String[]{"nonexistent"}));
+        assertNull(config.node("nonexistent").get(String.class));
     }
 
     @Test
-    void setIfAbsentSets() {
-        config.setIfAbsent("value", "key1");
-        assertEquals("value", config.get("key1"));
-    }
-
-    @Test
-    void setIfAbsentDoesNotOverwrite() {
-        config.set("original", "key1");
-        config.setIfAbsent("new", "key1");
-        assertEquals("original", config.get("key1"));
-    }
-
-    @Test
-    void setIfAbsentMap() {
-        Map<String[], Object> map = new LinkedHashMap<>();
-        map.put(new String[]{"a"}, "val1");
-        map.put(new String[]{"b"}, "val2");
-        config.setIfAbsent(map);
-        assertEquals("val1", config.get("a"));
-        assertEquals("val2", config.get("b"));
-    }
-
-    @Test
-    void setIfAbsentMapDoesNotOverwrite() {
-        config.set("existing", "a");
-        Map<String[], Object> map = new LinkedHashMap<>();
-        map.put(new String[]{"a"}, "new");
-        map.put(new String[]{"b"}, "val2");
-        config.setIfAbsent(map);
-        assertEquals("existing", config.get("a"));
-        assertEquals("val2", config.get("b"));
+    void setAndGetRoundTrip() {
+        config.node("key1").set("value");
+        assertEquals("value", config.node("key1").get());
     }
 
     @Test
     void getKeys() {
-        config.set("a", "key1");
-        config.set("b", "key2");
-        Set<String[]> keys = config.getKeys(false);
-        assertEquals(2, keys.size());
+        config.node("key1").set("a");
+        config.node("key2").set("b");
+        Map<String, ConfigNode> values = config.getChildren();
+        assertEquals(2, values.size());
     }
 
     @Test
     void getNormalizedValues() {
-        config.set("hello", "key1");
-        config.set("world", "key2");
-        Map<String[], Object> values = config.getNormalizedValues(false);
+        config.node("key1").set("hello");
+        config.node("key2").set("world");
+        Map<String, ConfigNode> values = config.getChildren();
         assertEquals(2, values.size());
     }
 
     @Test
     void normalizeObjectNull() {
-        assertNull(config.normalizeObject(null));
+        assertNull(config.normalize(null));
     }
 
     @Test
     void normalizeObjectPlain() {
-        assertEquals("hello", config.normalizeObject("hello"));
+        assertEquals("hello", config.normalize("hello"));
     }
 
     @Test
     void normalizeObjectMap() {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("key", "value");
-        Object result = config.normalizeObject(map);
+        Object result = config.normalize(map);
         assertTrue(result instanceof Map);
         @SuppressWarnings("unchecked")
         Map<String, Object> resultMap = (Map<String, Object>) result;
@@ -201,7 +176,7 @@ class ConfigDefaultMethodsTest {
     @Test
     void normalizeObjectCollection() {
         List<Object> list = Arrays.asList("a", "b", "c");
-        Object result = config.normalizeObject(list);
+        Object result = config.normalize(list);
         assertTrue(result instanceof List);
         @SuppressWarnings("unchecked")
         List<Object> resultList = (List<Object>) result;
@@ -211,14 +186,14 @@ class ConfigDefaultMethodsTest {
 
     @Test
     void isInstanceTrue() {
-        config.set("hello", "key1");
-        assertTrue(config.isInstance(String.class, "key1"));
+        config.node("key1").set("hello");
+        assertNotNull(config.node("key1").get(String.class));
     }
 
     @Test
     void isInstanceFalse() {
-        config.set("hello", "key1");
-        assertFalse(config.isInstance(Integer.class, "key1"));
+        config.node("key1").set("hello");
+        assertNull(config.node("key1").get(Integer.class));
     }
 
     @Test
@@ -239,14 +214,14 @@ class ConfigDefaultMethodsTest {
 
     @Test
     void getCommentReturnsEmpty() {
-        assertTrue(config.getComment("key1").isEmpty());
-        assertTrue(config.getComment(CommentType.BLOCK, "key1").isEmpty());
-        assertTrue(config.getComment(CommentType.SIDE, "key1").isEmpty());
+        assertTrue(config.node("key1").getComment().isEmpty());
+        assertTrue(config.node("key1").getComment(CommentType.BLOCK).isEmpty());
+        assertTrue(config.node("key1").getComment(CommentType.SIDE).isEmpty());
     }
 
     /**
      * Simple Config implementation backed by a HashMap for testing default methods.
-     * Overrides default methods that have ambiguous get() calls to avoid NPE.
+     * Implements the new node-based Config API.
      */
     static class SimpleMapConfig implements Config {
         private final Map<String[], Object> data = new LinkedHashMap<>();
@@ -270,118 +245,37 @@ class ConfigDefaultMethodsTest {
         }
 
         @Override
-        public Object get(Object def, String... path) {
-            if (path.length == 0) {
-                return def;
-            }
-            for (Map.Entry<String[], Object> entry : data.entrySet()) {
-                String[] key = entry.getKey();
-                if (key.length == path.length) {
-                    boolean match = true;
-                    for (int i = 0; i < path.length; i++) {
-                        if (!key[i].equals(path[i])) {
-                            match = false;
-                            break;
-                        }
-                    }
-                    if (match) {
-                        return entry.getValue();
-                    }
-                }
-            }
-            return def;
-        }
-
-        @Override
-        public void set(Object value, String... path) {
-            if (path.length > 0) {
-                data.entrySet().removeIf(entry -> {
-                    String[] key = entry.getKey();
-                    if (key.length != path.length) return false;
-                    for (int i = 0; i < path.length; i++) {
-                        if (!key[i].equals(path[i])) return false;
-                    }
-                    return true;
-                });
-                data.put(path, value);
-            }
-        }
-
-        @Override
         public String getName() {
             return name;
         }
 
         @Override
-        public Map<String[], Object> getValues(boolean deep, String... path) {
-            Map<String[], Object> result = new LinkedHashMap<>();
+        public ConfigNode node(String... path) {
+            return new SimpleConfigNode(this, path);
+        }
+
+        @Override
+        public Object get() {
+            return null;
+        }
+
+        @Override
+        public void set(Object value) {
+        }
+
+        @Override
+        public void remove() {
+            data.clear();
+        }
+
+        @Override
+        public Map<String, ConfigNode> getChildren() {
+            Map<String, ConfigNode> result = new LinkedHashMap<>();
             for (Map.Entry<String[], Object> entry : data.entrySet()) {
                 String[] key = entry.getKey();
-                if (path.length == 0 || startsWith(key, path)) {
-                    result.put(key, entry.getValue());
-                }
+                result.put(key[key.length - 1], new SimpleConfigNode(this, key));
             }
             return result;
-        }
-
-        @Override
-        public boolean contains(String... path) {
-            Object def = null;
-            return get(def, path) != null;
-        }
-
-        @Override
-        public Object get(String... path) {
-            Object def = null;
-            return get(def, path);
-        }
-
-        @Override
-        public boolean isInstance(Class<?> type, String... path) {
-            Object def = null;
-            return type.isInstance(get(def, path));
-        }
-
-        @Override
-        public Object getNormalized(Object def, String... path) {
-            if (path.length == 0) {
-                return normalizeObject(def);
-            }
-            for (Map.Entry<String[], Object> entry : data.entrySet()) {
-                String[] key = entry.getKey();
-                if (key.length == path.length) {
-                    boolean match = true;
-                    for (int i = 0; i < path.length; i++) {
-                        if (!key[i].equals(path[i])) {
-                            match = false;
-                            break;
-                        }
-                    }
-                    if (match) {
-                        return normalizeObject(entry.getValue());
-                    }
-                }
-            }
-            return normalizeObject(def);
-        }
-
-        @Override
-        public Object getNormalized(String... path) {
-            return getNormalized(null, path);
-        }
-
-        @Override
-        public void remove(String... path) {
-            if (path.length == 0) {
-                clear();
-            } else {
-                set(null, path);
-            }
-        }
-
-        @Override
-        public void clear() {
-            getKeys(false).forEach(this::remove);
         }
 
         @Override
@@ -404,6 +298,135 @@ class ConfigDefaultMethodsTest {
         @Override
         public boolean isNormalizable(Object object) {
             return false;
+        }
+
+        private Object getValueAt(String... path) {
+            if (path.length == 0) {
+                return null;
+            }
+            for (Map.Entry<String[], Object> entry : data.entrySet()) {
+                String[] key = entry.getKey();
+                if (key.length == path.length) {
+                    boolean match = true;
+                    for (int i = 0; i < path.length; i++) {
+                        if (!key[i].equals(path[i])) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        return entry.getValue();
+                    }
+                }
+            }
+            return null;
+        }
+
+        private void setValueAt(Object value, String... path) {
+            if (path.length > 0) {
+                data.entrySet().removeIf(entry -> {
+                    String[] key = entry.getKey();
+                    if (key.length != path.length) return false;
+                    for (int i = 0; i < path.length; i++) {
+                        if (!key[i].equals(path[i])) return false;
+                    }
+                    return true;
+                });
+                data.put(path, value);
+            }
+        }
+
+        private boolean containsPath(String... path) {
+            return getValueAt(path) != null;
+        }
+
+        private static class SimpleConfigNode implements ConfigNode {
+            private final SimpleMapConfig config;
+            private final String[] path;
+            private final ConfigNode parent;
+
+            SimpleConfigNode(SimpleMapConfig config, String[] path) {
+                this(config, path, null);
+            }
+
+            SimpleConfigNode(SimpleMapConfig config, String[] path, ConfigNode parent) {
+                this.config = config;
+                this.path = path;
+                this.parent = parent;
+            }
+
+            @Override
+            public String[] getPath() {
+                return path;
+            }
+
+            @Override
+            public ConfigNode getParent() {
+                return parent;
+            }
+
+            @Override
+            public Config getConfig() {
+                return config;
+            }
+
+            @Override
+            public Object get() {
+                return config.getValueAt(path);
+            }
+
+            @Override
+            public void set(Object value) {
+                config.setValueAt(value, path);
+            }
+
+            @Override
+            public ConfigNode node(String... childPath) {
+                String[] fullPath = new String[path.length + childPath.length];
+                System.arraycopy(path, 0, fullPath, 0, path.length);
+                System.arraycopy(childPath, 0, fullPath, path.length, childPath.length);
+                return new SimpleConfigNode(config, fullPath, this);
+            }
+
+            @Override
+            public boolean exists() {
+                return get() != null;
+            }
+
+            @Override
+            public void remove() {
+                config.setValueAt(null, path);
+            }
+
+            @Override
+            public boolean hasChild() {
+                return !getChildren().isEmpty();
+            }
+
+            @Override
+            public Map<String, ConfigNode> getChildren() {
+                Map<String, ConfigNode> result = new LinkedHashMap<>();
+                for (Map.Entry<String[], Object> entry : config.data.entrySet()) {
+                    String[] key = entry.getKey();
+                    if (startsWith(key, path) && key.length > path.length) {
+                        result.put(key[key.length - 1], new SimpleConfigNode(config, key));
+                    }
+                }
+                return result;
+            }
+
+            @Override
+            public Object getNormalized() {
+                return get();
+            }
+
+            private boolean startsWith(String[] key, String[] prefix) {
+                if (key.length < prefix.length) return false;
+                for (int i = 0; i < prefix.length; i++) {
+                    if (!key[i].equals(prefix[i])) return false;
+                }
+                return true;
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.stream.JsonWriter;
 import io.github.projectunified.craftconfig.common.Config;
 import io.github.projectunified.craftconfig.common.ConfigLogger;
+import io.github.projectunified.craftconfig.common.ConfigNode;
 import io.github.projectunified.craftconfig.gson.util.GsonUtil;
 
 import java.io.File;
@@ -15,13 +16,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
-
-import static io.github.projectunified.craftconfig.common.PathString.asArray;
-import static io.github.projectunified.craftconfig.common.PathString.concat;
 
 /**
  * The {@link Config} implementation for Gson
@@ -31,129 +27,126 @@ public class GsonConfig implements Config {
     private final File file;
     private JsonObject root = new JsonObject();
 
-    /**
-     * Create a new config
-     *
-     * @param file the file
-     * @param gson the Gson instance
-     */
     public GsonConfig(File file, Gson gson) {
         this.file = file;
         this.gson = gson;
     }
 
-    /**
-     * Create a new config
-     *
-     * @param file the file
-     */
     public GsonConfig(File file) {
         this(file, new Gson());
     }
 
-    private static Map<String[], Object> getValues(JsonObject object, boolean deep) {
-        Map<String[], Object> values = new HashMap<>();
-        for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
-            String[] key = asArray(entry.getKey());
-            JsonElement element = entry.getValue();
-            values.put(key, element);
-            if (element.isJsonObject() && deep) {
-                Map<String[], Object> subValues = getValues(element.getAsJsonObject(), true);
-                for (Map.Entry<String[], Object> subEntry : subValues.entrySet()) {
-                    values.put(concat(key, subEntry.getKey()), subEntry.getValue());
-                }
-            }
-        }
-        return values;
+    private static String[] concat(String[] a, String[] b) {
+        String[] result = new String[a.length + b.length];
+        System.arraycopy(a, 0, result, 0, a.length);
+        System.arraycopy(b, 0, result, a.length, b.length);
+        return result;
     }
 
-    @Override
-    public JsonObject getOriginal() {
-        return this.root;
-    }
-
-    private Optional<JsonObject> getJsonObject(boolean createIfNotFound, String... path) {
-        JsonObject currentObject = this.root;
-        if (path.length == 0) {
-            return Optional.of(currentObject);
-        }
-        for (int i = 0; i < path.length; i++) {
-            String key = path[i];
-            if (i == path.length - 1) {
-                return Optional.of(currentObject);
-            } else {
-                JsonElement element = currentObject.has(key) ? currentObject.get(key) : JsonNull.INSTANCE;
-                if (element.isJsonObject()) {
-                    currentObject = element.getAsJsonObject();
-                } else if (createIfNotFound) {
-                    JsonObject newObject = new JsonObject();
-                    currentObject.add(key, newObject);
-                    currentObject = newObject;
-                } else {
-                    return Optional.empty();
-                }
-            }
-        }
-        return Optional.empty();
-    }
-
-    @Override
-    public Object get(Object def, String... path) {
-        if (path.length == 0) {
+    private Object getValueAt(String... absolutePath) {
+        if (absolutePath.length == 0) {
             return this.root;
         }
-        return getJsonObject(false, path).<Object>map(object -> {
-            String lastPath = path[path.length - 1];
-            if (object.has(lastPath)) {
-                return object.get(lastPath);
-            }
+        JsonObject parent = navigateToParent(absolutePath);
+        if (parent == null) {
             return null;
-        }).orElseGet(() -> {
-            if (def == null) {
-                return null;
-            }
-            if (def instanceof JsonElement) {
-                return def;
-            }
-            return gson.toJsonTree(def);
-        });
+        }
+        String lastKey = absolutePath[absolutePath.length - 1];
+        if (!parent.has(lastKey)) {
+            return null;
+        }
+        return parent.get(lastKey);
     }
 
-    @Override
-    public void set(Object value, String... path) {
-        JsonElement element = value instanceof JsonElement ? (JsonElement) value : gson.toJsonTree(value);
-        if (path.length == 0) {
-            if (element.isJsonObject()) {
-                this.root = element.getAsJsonObject();
+    private void setValueAt(Object value, String... absolutePath) {
+        if (absolutePath.length == 0) {
+            if (value instanceof JsonObject) {
+                this.root = (JsonObject) value;
             }
             return;
         }
-        getJsonObject(true, path).ifPresent(object -> {
-            String lastPath = path[path.length - 1];
-            if (element.isJsonNull()) {
-                object.remove(lastPath);
+        JsonObject parent = navigateToParentOrCreate(absolutePath);
+        if (parent == null) {
+            return;
+        }
+        String lastKey = absolutePath[absolutePath.length - 1];
+        if (value == null) {
+            parent.remove(lastKey);
+        } else {
+            JsonElement element = value instanceof JsonElement ? (JsonElement) value : gson.toJsonTree(value);
+            parent.add(lastKey, element);
+        }
+    }
+
+    private JsonObject navigateToParent(String[] absolutePath) {
+        JsonObject currentObject = this.root;
+        for (int i = 0; i < absolutePath.length - 1; i++) {
+            String key = absolutePath[i];
+            JsonElement element = currentObject.has(key) ? currentObject.get(key) : JsonNull.INSTANCE;
+            if (element.isJsonObject()) {
+                currentObject = element.getAsJsonObject();
             } else {
-                object.add(lastPath, element);
+                return null;
             }
-        });
+        }
+        return currentObject;
+    }
+
+    private JsonObject navigateToParentOrCreate(String[] absolutePath) {
+        JsonObject currentObject = this.root;
+        for (int i = 0; i < absolutePath.length - 1; i++) {
+            String key = absolutePath[i];
+            JsonElement element = currentObject.has(key) ? currentObject.get(key) : JsonNull.INSTANCE;
+            if (element.isJsonObject()) {
+                currentObject = element.getAsJsonObject();
+            } else {
+                JsonObject newObject = new JsonObject();
+                currentObject.add(key, newObject);
+                currentObject = newObject;
+            }
+        }
+        return currentObject;
     }
 
     @Override
-    public void clear() {
+    public Object get() {
+        return this.root;
+    }
+
+    @Override
+    public void set(Object value) {
+        if (value == null) {
+            this.remove();
+        } else {
+            throw new IllegalArgumentException("You cannot set the whole configuration to a value");
+        }
+    }
+
+    @Override
+    public ConfigNode node(String... path) {
+        if (path.length == 0) {
+            return this;
+        }
+        return new GsonConfigNode(path, this, path);
+    }
+
+    @Override
+    public void remove() {
         this.root = new JsonObject();
+    }
+
+    @Override
+    public Map<String, ConfigNode> getChildren() {
+        Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+        for (String key : this.root.keySet()) {
+            nodes.put(key, new GsonConfigNode(new String[]{key}, this, new String[]{key}));
+        }
+        return nodes;
     }
 
     @Override
     public String getName() {
         return file.getName();
-    }
-
-    @Override
-    public Map<String[], Object> getValues(boolean deep, String... path) {
-        if (path.length == 0) {
-            return getValues(this.root, deep);
-        }
-        return getJsonObject(false, path).map(object -> getValues(object, deep)).orElse(Collections.emptyMap());
     }
 
     @Override
@@ -199,6 +192,11 @@ public class GsonConfig implements Config {
     }
 
     @Override
+    public Object getOriginal() {
+        return this.root;
+    }
+
+    @Override
     public Object normalize(Object object) {
         if (!isNormalizable(object)) {
             return object;
@@ -209,5 +207,90 @@ public class GsonConfig implements Config {
     @Override
     public boolean isNormalizable(Object object) {
         return object instanceof JsonElement;
+    }
+
+    /**
+     * Gson implementation of {@link ConfigNode}.
+     */
+    public class GsonConfigNode implements ConfigNode {
+        private final String[] path;
+        private final ConfigNode parent;
+        private final String[] absolutePath;
+
+        GsonConfigNode(String[] path, ConfigNode parent, String[] absolutePath) {
+            this.path = path;
+            this.parent = parent;
+            this.absolutePath = absolutePath;
+        }
+
+        @Override
+        public String[] getPath() {
+            return path;
+        }
+
+        @Override
+        public ConfigNode getParent() {
+            return parent;
+        }
+
+        @Override
+        public Config getConfig() {
+            return GsonConfig.this;
+        }
+
+        @Override
+        public Object get() {
+            return GsonConfig.this.getValueAt(absolutePath);
+        }
+
+        @Override
+        public void set(Object value) {
+            GsonConfig.this.setValueAt(value, absolutePath);
+        }
+
+        @Override
+        public ConfigNode node(String... path) {
+            if (path.length == 0) {
+                return this;
+            }
+            Object value = get();
+            if (!(value instanceof JsonObject)) {
+                throw new IllegalStateException("The node is not a JSON object");
+            }
+            String[] childAbsolutePath = concat(this.absolutePath, path);
+            return new GsonConfigNode(path, this, childAbsolutePath);
+        }
+
+        @Override
+        public void remove() {
+            GsonConfig.this.setValueAt(null, absolutePath);
+        }
+
+        @Override
+        public boolean hasChild() {
+            Object value = get();
+            return value instanceof JsonObject;
+        }
+
+        @Override
+        public Map<String, ConfigNode> getChildren() {
+            Object value = get();
+            if (!(value instanceof JsonObject)) {
+                throw new IllegalStateException("The node is not a JSON object");
+            }
+            JsonObject object = (JsonObject) value;
+            Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+            for (String key : object.keySet()) {
+                String[] childAbsolutePath = concat(absolutePath, new String[]{key});
+                nodes.put(key, new GsonConfigNode(new String[]{key}, this, childAbsolutePath));
+            }
+            return nodes;
+        }
+
+        @Override
+        public Object getNormalized() {
+            Object value = get();
+            return GsonConfig.this.normalize(value);
+        }
     }
 }

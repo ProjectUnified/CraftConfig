@@ -1,9 +1,6 @@
 package io.github.projectunified.craftconfig.bukkit;
 
-import io.github.projectunified.craftconfig.common.CommentType;
-import io.github.projectunified.craftconfig.common.Config;
-import io.github.projectunified.craftconfig.common.ConfigLogger;
-import io.github.projectunified.craftconfig.common.PathString;
+import io.github.projectunified.craftconfig.common.*;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -53,7 +50,6 @@ public class BukkitConfig implements Config {
         try {
             plugin.saveResource(filename, false);
         } catch (IllegalArgumentException e) {
-            // IGNORED
         }
     }
 
@@ -66,62 +62,14 @@ public class BukkitConfig implements Config {
         this(plugin, "config.yml");
     }
 
-    private String toPath(String... path) {
-        return PathString.join(String.valueOf(configuration.options().pathSeparator()), path);
-    }
-
-    private Map<String[], Object> toPathStringMap(Map<String, Object> map) {
-        return PathString.split(String.valueOf(configuration.options().pathSeparator()), map);
-    }
-
     @Override
     public YamlConfiguration getOriginal() {
         return this.configuration;
     }
 
     @Override
-    public Object get(Object def, String... path) {
-        return this.configuration.get(toPath(path), def);
-    }
-
-    @Override
-    public void set(Object value, String... path) {
-        this.configuration.set(toPath(path), value);
-    }
-
-    @Override
-    public boolean contains(String... path) {
-        return this.configuration.isSet(toPath(path));
-    }
-
-    @Override
     public String getName() {
         return this.file.getName();
-    }
-
-    @Override
-    public Map<String[], Object> getValues(boolean deep, String... path) {
-        if (path.length == 0) {
-            return toPathStringMap(this.configuration.getValues(deep));
-        } else {
-            return Optional.ofNullable(this.configuration.getConfigurationSection(toPath(path)))
-                    .map(configurationSection -> configurationSection.getValues(deep))
-                    .map(this::toPathStringMap)
-                    .orElse(Collections.emptyMap());
-        }
-    }
-
-    @Override
-    public Object normalize(Object object) {
-        if (object instanceof ConfigurationSection) {
-            return ((ConfigurationSection) object).getValues(false);
-        }
-        return object;
-    }
-
-    @Override
-    public boolean isNormalizable(Object object) {
-        return object instanceof ConfigurationSection;
     }
 
     @Override
@@ -159,47 +107,175 @@ public class BukkitConfig implements Config {
     }
 
     @Override
-    public List<String> getComment(CommentType type, String... path) {
-        if (path.length == 0) {
-            String header = this.configuration.options().header();
-            return header.isEmpty() ? Collections.emptyList() : Arrays.asList(header.split("\\r?\\n"));
+    public Object normalize(Object object) {
+        if (object instanceof ConfigurationSection) {
+            return ((ConfigurationSection) object).getValues(false);
         }
-
-        if (!isCommentSupported) return Collections.emptyList();
-        List<String> comments;
-        switch (type) {
-            case BLOCK:
-                comments = this.configuration.getComments(toPath(path));
-                break;
-            case SIDE:
-                comments = this.configuration.getInlineComments(toPath(path));
-                break;
-            default:
-                comments = Collections.emptyList();
-                break;
-        }
-        return comments;
+        return object;
     }
 
     @Override
-    public void setComment(CommentType type, List<String> value, String... path) {
+    public boolean isNormalizable(Object object) {
+        return object instanceof ConfigurationSection;
+    }
+
+    @Override
+    public Object get() {
+        return this.configuration;
+    }
+
+    @Override
+    public void set(Object value) {
+        if (value == null) {
+            this.remove();
+        } else {
+            throw new IllegalArgumentException("You cannot set the whole configuration to a value");
+        }
+    }
+
+    @Override
+    public ConfigNode node(String... path) {
         if (path.length == 0) {
-            this.configuration.options()
-                    .copyHeader(true)
-                    .header(value == null || value.isEmpty() ? null : String.join(System.lineSeparator(), value));
-            return;
+            return this;
+        }
+        return new BukkitConfigNode(path, this, configuration);
+    }
+
+    @Override
+    public void remove() {
+        for (String key : this.configuration.getKeys(false)) {
+            this.configuration.set(key, null);
+        }
+    }
+
+    @Override
+    public Map<String, ConfigNode> getChildren() {
+        Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+        for (String key : this.configuration.getKeys(false)) {
+            nodes.put(key, new BukkitConfigNode(new String[]{key}, this, configuration));
+        }
+        return nodes;
+    }
+
+    @Override
+    public List<String> getComment(CommentType type) {
+        String header = this.configuration.options().header();
+        return header.isEmpty() ? Collections.emptyList() : Arrays.asList(header.split("\\r?\\n"));
+    }
+
+    @Override
+    public void setComment(CommentType type, List<String> value) {
+        this.configuration.options()
+                .copyHeader(true)
+                .header(value == null || value.isEmpty() ? null : String.join(System.lineSeparator(), value));
+    }
+
+    private String getPath(String[] path) {
+        return PathString.join(String.valueOf(configuration.options().pathSeparator()), path);
+    }
+
+    /**
+     * Bukkit implementation of {@link ConfigNode}.
+     */
+    public class BukkitConfigNode implements ConfigNode {
+        private final String[] path;
+        private final ConfigNode parent;
+        private final ConfigurationSection parentSection;
+
+        BukkitConfigNode(String[] path, ConfigNode parent, ConfigurationSection parentSection) {
+            this.path = path;
+            this.parent = parent;
+            this.parentSection = parentSection;
         }
 
-        if (!isCommentSupported) return;
-        switch (type) {
-            case BLOCK:
-                this.configuration.setComments(toPath(path), value);
-                break;
-            case SIDE:
-                this.configuration.setInlineComments(toPath(path), value);
-                break;
-            default:
-                break;
+        @Override
+        public String[] getPath() {
+            return path;
+        }
+
+        @Override
+        public ConfigNode getParent() {
+            return parent;
+        }
+
+        @Override
+        public Config getConfig() {
+            return BukkitConfig.this;
+        }
+
+        @Override
+        public Object get() {
+            return parentSection.get(BukkitConfig.this.getPath(path));
+        }
+
+        @Override
+        public void set(Object value) {
+            parentSection.set(BukkitConfig.this.getPath(path), value);
+        }
+
+        @Override
+        public ConfigNode node(String... path) {
+            if (path.length == 0) {
+                return this;
+            }
+            ConfigurationSection section = parentSection.getConfigurationSection(BukkitConfig.this.getPath(this.path));
+            if (section == null) {
+                throw new IllegalStateException("The node is not a configuration section");
+            }
+            return new BukkitConfigNode(path, this, section);
+        }
+
+        @Override
+        public void remove() {
+            parentSection.set(BukkitConfig.this.getPath(path), null);
+        }
+
+        @Override
+        public boolean hasChild() {
+            return this.get() instanceof ConfigurationSection;
+        }
+
+        @Override
+        public Map<String, ConfigNode> getChildren() {
+            Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+            ConfigurationSection section = parentSection.getConfigurationSection(BukkitConfig.this.getPath(this.path));
+            if (section == null) {
+                throw new IllegalStateException("The node is not a configuration section");
+            }
+            for (String key : section.getKeys(false)) {
+                nodes.put(key, new BukkitConfigNode(new String[]{key}, this, section));
+            }
+            return nodes;
+        }
+
+        @Override
+        public List<String> getComment(CommentType type) {
+            if (!isCommentSupported) return Collections.emptyList();
+            String joined = BukkitConfig.this.getPath(this.path);
+            switch (type) {
+                case BLOCK:
+                    return parentSection.getComments(joined);
+                case SIDE:
+                    return parentSection.getInlineComments(joined);
+                default:
+                    return Collections.emptyList();
+            }
+        }
+
+        @Override
+        public void setComment(CommentType type, List<String> value) {
+            if (!isCommentSupported) return;
+            String joined = BukkitConfig.this.getPath(this.path);
+            switch (type) {
+                case BLOCK:
+                    parentSection.setComments(joined, value);
+                    break;
+                case SIDE:
+                    parentSection.setInlineComments(joined, value);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }

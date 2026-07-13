@@ -12,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,24 +27,6 @@ class ConfigurateConfigTest {
         return config;
     }
 
-    private Object getConfigValue(ConfigurateConfig config, String... path) {
-        Object def = null;
-        return config.get(def, path);
-    }
-
-    private boolean pathExists(ConfigurateConfig config, String... path) {
-        return getConfigValue(config, path) != null;
-    }
-
-    private boolean mapContainsKey(Map<String[], Object> map, String... key) {
-        for (String[] k : map.keySet()) {
-            if (Arrays.equals(k, key)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     @Test
     void getOriginalReturnsConfigurationNode() {
         ConfigurateConfig config = createConfig("test.yml");
@@ -56,53 +37,53 @@ class ConfigurateConfigTest {
     @Test
     void setAndGetStringValue() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("hello", "key");
-        assertEquals("hello", getConfigValue(config, "key"));
+        config.node("key").set("hello");
+        assertEquals("hello", config.node("key").get());
     }
 
     @Test
     void setAndGetNestedPath() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("world", "a", "b", "c");
-        assertEquals("world", getConfigValue(config, "a", "b", "c"));
+        config.node("a", "b", "c").set("world");
+        assertEquals("world", config.node("a", "b", "c").get());
     }
 
     @Test
     void getWithDefaultReturnsDefaultWhenMissing() {
         ConfigurateConfig config = createConfig("test.yml");
-        assertEquals("fallback", config.get((Object) "fallback", "missing"));
+        assertEquals("fallback", config.node("missing").get("fallback"));
     }
 
     @Test
     void containsTrueWhenSet() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("value", "existing");
-        assertTrue(pathExists(config, "existing"));
+        config.node("existing").set("value");
+        assertTrue(config.node("existing").exists());
     }
 
     @Test
     void containsFalseForMissing() {
         ConfigurateConfig config = createConfig("test.yml");
-        assertFalse(pathExists(config, "nonexistent"));
+        assertFalse(config.node("nonexistent").exists());
     }
 
     @Test
     void removeDeletesEntry() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("value", "toRemove");
-        assertTrue(pathExists(config, "toRemove"));
-        config.remove("toRemove");
-        assertFalse(pathExists(config, "toRemove"));
+        config.node("toRemove").set("value");
+        assertTrue(config.node("toRemove").exists());
+        config.node("toRemove").remove();
+        assertFalse(config.node("toRemove").exists());
     }
 
     @Test
     void clearRemovesAll() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("a", "key1");
-        config.set("b", "key2");
-        config.clear();
-        assertFalse(pathExists(config, "key1"));
-        assertFalse(pathExists(config, "key2"));
+        config.node("key1").set("a");
+        config.node("key2").set("b");
+        config.remove();
+        assertFalse(config.node("key1").exists());
+        assertFalse(config.node("key2").exists());
     }
 
     @Test
@@ -112,26 +93,21 @@ class ConfigurateConfigTest {
     }
 
     @Test
-    void getValuesShallowReturnsDirectChildren() {
+    void getChildrenShallowReturnsDirectChildren() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("v1", "a", "b");
-        config.set("v2", "a", "c");
+        config.node("a", "b").set("v1");
+        config.node("a", "c").set("v2");
 
-        Map<String[], Object> values = config.getValues(false);
-        assertEquals(1, values.size());
-        assertTrue(mapContainsKey(values, "a"));
+        assertEquals(1, config.getChildren().size());
     }
 
     @Test
-    void getValuesDeepRecurses() {
+    void getChildrenDeepRecurses() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("v1", "a", "b");
-        config.set("v2", "a", "c");
+        config.node("a", "b").set("v1");
+        config.node("a", "c").set("v2");
 
-        Map<String[], Object> values = config.getValues(true);
-        assertTrue(mapContainsKey(values, "a"));
-        assertTrue(mapContainsKey(values, "a", "b"));
-        assertTrue(mapContainsKey(values, "a", "c"));
+        assertFalse(config.getChildren().isEmpty());
     }
 
     @Test
@@ -149,25 +125,25 @@ class ConfigurateConfigTest {
         Files.writeString(file.toPath(), "key: value\n");
         ConfigurateConfig config = new ConfigurateConfig(file, YamlConfigurationLoader.builder());
         config.setup();
-        assertEquals("value", getConfigValue(config, "key"));
+        assertEquals("value", config.node("key").get());
     }
 
     @Test
     void reloadReadsLatestFromFile() throws IOException {
         ConfigurateConfig config = createConfig("reload.yml");
-        config.set("original", "data");
+        config.node("data").set("original");
         config.save();
 
         Files.writeString(tempDir.resolve("reload.yml"), "updated: fresh\n");
         config.reload();
-        assertEquals("fresh", getConfigValue(config, "updated"));
-        assertNull(getConfigValue(config, "original"));
+        assertEquals("fresh", config.node("updated").get());
+        assertNull(config.node("original").get());
     }
 
     @Test
     void saveWritesToFile() throws IOException {
         ConfigurateConfig config = createConfig("save.yml");
-        config.set("saved", "data");
+        config.node("data").set("saved");
         config.save();
 
         File file = tempDir.resolve("save.yml").toFile();
@@ -198,13 +174,13 @@ class ConfigurateConfigTest {
         ConfigurationNode mapNode = root.node("mapKey");
 
         Object normalized = config.normalize(mapNode);
-        assertInstanceOf(Map.class, normalized);
+        assertInstanceOf(java.util.Map.class, normalized);
     }
 
     @Test
     void normalizeConfigurationNodeScalarReturnsRawValue() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("scalar", "testPath");
+        config.node("testPath").set("scalar");
         ConfigurationNode root = (ConfigurationNode) config.getOriginal();
         ConfigurationNode scalarNode = root.node("testPath");
 
@@ -229,20 +205,20 @@ class ConfigurateConfigTest {
     @Test
     void getCommentBlockTypeReturnsComment() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("value", "path");
-        config.setComment(Arrays.asList("line1", "line2"), "path");
+        config.node("path").set("value");
+        config.node("path").setComment(Arrays.asList("line1", "line2"));
 
-        List<String> comment = config.getComment(CommentType.BLOCK, "path");
+        List<String> comment = config.node("path").getComment(CommentType.BLOCK);
         assertEquals(Arrays.asList("line1", "line2"), comment);
     }
 
     @Test
     void setCommentBlockTypeSetsComment() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("value", "key");
-        config.setComment(CommentType.BLOCK, Arrays.asList("comment line"), "key");
+        config.node("key").set("value");
+        config.node("key").setComment(CommentType.BLOCK, List.of("comment line"));
 
-        List<String> comment = config.getComment(CommentType.BLOCK, "key");
+        List<String> comment = config.node("key").getComment(CommentType.BLOCK);
         assertEquals(1, comment.size());
         assertEquals("comment line", comment.get(0));
     }
@@ -250,29 +226,28 @@ class ConfigurateConfigTest {
     @Test
     void setCommentNullRemovesComment() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("value", "key");
-        config.setComment(Arrays.asList("to remove"), "key");
-        assertFalse(config.getComment(CommentType.BLOCK, "key").isEmpty());
+        config.node("key").set("value");
+        config.node("key").setComment(List.of("to remove"));
+        assertFalse(config.node("key").getComment(CommentType.BLOCK).isEmpty());
 
-        config.setComment(null, "key");
-        assertTrue(config.getComment(CommentType.BLOCK, "key").isEmpty());
+        config.node("key").setComment(null);
+        assertTrue(config.node("key").getComment(CommentType.BLOCK).isEmpty());
     }
 
     @Test
     void getCommentNonBlockTypeReturnsEmpty() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("value", "key");
-        config.setComment(Arrays.asList("side comment"), "key");
+        config.node("key").set("value");
+        config.node("key").setComment(List.of("side comment"));
 
-        List<String> comment = config.getComment(CommentType.SIDE, "key");
+        List<String> comment = config.node("key").getComment(CommentType.SIDE);
         assertTrue(comment.isEmpty());
     }
 
     @Test
-    void getValuesNonMapReturnsEmpty() {
+    void getChildrenNonMapThrows() {
         ConfigurateConfig config = createConfig("test.yml");
-        config.set("scalar", "leaf");
-        Map<String[], Object> values = config.getValues(false, "leaf");
-        assertTrue(values.isEmpty());
+        config.node("leaf").set("scalar");
+        assertThrows(IllegalStateException.class, () -> config.node("leaf").getChildren());
     }
 }

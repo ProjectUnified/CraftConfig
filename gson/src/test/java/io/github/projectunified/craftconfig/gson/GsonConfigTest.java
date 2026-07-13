@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -23,11 +22,6 @@ class GsonConfigTest {
         return tempDir.resolve(name).toFile();
     }
 
-    private Object getConfigValue(GsonConfig config, String... path) {
-        Object def = null;
-        return config.get(def, path);
-    }
-
     @Test
     void getOriginalReturnsJsonObject() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
@@ -38,8 +32,8 @@ class GsonConfigTest {
     @Test
     void setAndGetStringValue() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("hello", "key");
-        Object value = getConfigValue(config, "key");
+        config.node("key").set("hello");
+        Object value = config.node("key").get();
         assertNotNull(value);
         assertInstanceOf(JsonPrimitive.class, value);
         assertEquals("hello", ((JsonPrimitive) value).getAsString());
@@ -48,8 +42,8 @@ class GsonConfigTest {
     @Test
     void setAndGetNestedPath() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("val", "a", "b", "c");
-        Object value = getConfigValue(config, "a", "b", "c");
+        config.node("a", "b", "c").set("val");
+        Object value = config.node("a", "b", "c").get();
         assertNotNull(value);
         assertInstanceOf(JsonPrimitive.class, value);
         assertEquals("val", ((JsonPrimitive) value).getAsString());
@@ -58,42 +52,42 @@ class GsonConfigTest {
     @Test
     void setNullRemovesEntry() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("hello", "key");
-        assertNotNull(getConfigValue(config, "key"));
-        config.set(null, "key");
-        assertNull(getConfigValue(config, "key"));
+        config.node("key").set("hello");
+        assertNotNull(config.node("key").get());
+        config.node("key").set(null);
+        assertNull(config.node("key").get());
     }
 
     @Test
     void containsTrueWhenSet() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("value", "existing");
-        assertTrue(config.contains("existing"));
+        config.node("existing").set("value");
+        assertTrue(config.node("existing").exists());
     }
 
     @Test
     void containsFalseForMissing() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        assertFalse(config.contains("missing"));
+        assertFalse(config.node("missing").exists());
     }
 
     @Test
     void removeDeletesEntry() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("value", "toRemove");
-        assertTrue(config.contains("toRemove"));
-        config.remove("toRemove");
-        assertFalse(config.contains("toRemove"));
+        config.node("toRemove").set("value");
+        assertTrue(config.node("toRemove").exists());
+        config.node("toRemove").remove();
+        assertFalse(config.node("toRemove").exists());
     }
 
     @Test
     void clearRemovesAll() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("val1", "key1");
-        config.set("val2", "key2");
-        config.clear();
-        assertFalse(config.contains("key1"));
-        assertFalse(config.contains("key2"));
+        config.node("key1").set("val1");
+        config.node("key2").set("val2");
+        config.remove();
+        assertFalse(config.node("key1").exists());
+        assertFalse(config.node("key2").exists());
     }
 
     @Test
@@ -103,24 +97,22 @@ class GsonConfigTest {
     }
 
     @Test
-    void getValuesShallowReturnsDirectChildren() {
+    void getChildrenShallowReturnsDirectChildren() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("v1", "top1");
-        config.set("v2", "top2");
-        config.set("nested", "child", "value");
+        config.node("top1").set("v1");
+        config.node("top2").set("v2");
+        config.node("child", "value").set("nested");
 
-        Map<String[], Object> values = config.getValues(false);
-        assertEquals(3, values.size());
+        assertEquals(3, config.getChildren().size());
     }
 
     @Test
-    void getValuesDeepRecurses() {
+    void getChildrenDeepRecurses() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
-        config.set("v1", "top");
-        config.set("nested", "child", "value");
+        config.node("top").set("v1");
+        config.node("child", "value").set("nested");
 
-        Map<String[], Object> values = config.getValues(true);
-        assertTrue(values.size() >= 2);
+        assertTrue(config.getChildren().size() >= 2);
     }
 
     @Test
@@ -142,7 +134,7 @@ class GsonConfigTest {
         GsonConfig config = new GsonConfig(file);
         config.setup();
 
-        Object value = getConfigValue(config, "loaded");
+        Object value = config.node("loaded").get();
         assertNotNull(value);
         assertInstanceOf(JsonPrimitive.class, value);
         assertEquals("true", ((JsonPrimitive) value).getAsString());
@@ -152,7 +144,7 @@ class GsonConfigTest {
     void saveWritesToFile() throws IOException {
         File file = getTestFile("savetest.json");
         GsonConfig config = new GsonConfig(file);
-        config.set("saved", "value");
+        config.node("value").set("saved");
         config.save();
 
         String content = new String(java.nio.file.Files.readAllBytes(file.toPath()));
@@ -172,7 +164,7 @@ class GsonConfigTest {
         }
 
         config.reload();
-        Object value = getConfigValue(config, "reloaded");
+        Object value = config.node("reloaded").get();
         assertNotNull(value);
         assertEquals("yes", ((JsonPrimitive) value).getAsString());
     }
@@ -212,10 +204,9 @@ class GsonConfigTest {
     void getWithDefaultReturnsDefaultWhenMissing() {
         GsonConfig config = new GsonConfig(getTestFile("test.json"));
         Object def = "defaultVal";
-        Object result = config.get(def, "missing");
+        Object result = config.node("missing").get(def);
         assertNotNull(result);
-        assertTrue(result instanceof com.google.gson.JsonPrimitive);
-        assertEquals("defaultVal", ((com.google.gson.JsonPrimitive) result).getAsString());
+        assertEquals("defaultVal", result);
     }
 
     @Test

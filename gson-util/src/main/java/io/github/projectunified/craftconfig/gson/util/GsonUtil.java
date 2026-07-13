@@ -14,7 +14,6 @@ import java.util.Map;
  */
 public final class GsonUtil {
     private GsonUtil() {
-        // EMPTY
     }
 
     /**

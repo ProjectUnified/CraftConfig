@@ -1,298 +1,73 @@
 package io.github.projectunified.craftconfig.common;
 
-import java.util.*;
-
 /**
- * The interface for all configurations
+ * The root configuration interface, extending {@link ConfigNode}.
+ * Provides file-level operations beyond the node-based access.
  */
-public interface Config {
+public interface Config extends ConfigNode {
 
-    /**
-     * Get the original instance
-     *
-     * @return the original instance
-     */
-    Object getOriginal();
+    @Override
+    default String[] getPath() {
+        return new String[0];
+    }
 
-    /**
-     * Get the value from the path
-     *
-     * @param def  the default value if the value is not found
-     * @param path the path
-     * @return the value
-     */
-    Object get(Object def, String... path);
+    @Override
+    default ConfigNode getParent() {
+        return null;
+    }
 
-    /**
-     * Set the value to the path
-     *
-     * @param value the value
-     * @param path  the path
-     */
-    void set(Object value, String... path);
+    @Override
+    default Config getConfig() {
+        return this;
+    }
 
-    /**
-     * Check if the configuration contains the path
-     *
-     * @param path the path
-     * @return true if it does
-     */
-    default boolean contains(String... path) {
-        Object def = null;
-        return get(def, path) != null;
+    @Override
+    default boolean hasChild() {
+        return true;
     }
 
     /**
-     * Get the name of the configuration
+     * Get the name of the configuration (typically the file name)
      *
      * @return the name
      */
     String getName();
 
     /**
-     * Get all values from the path
-     *
-     * @param deep should we go deeper from the path?
-     * @param path the path
-     * @return the values
-     */
-    Map<String[], Object> getValues(boolean deep, String... path);
-
-    /**
-     * Set up the configuration
+     * Set up the configuration (create file, load initial data)
      */
     void setup();
 
     /**
-     * Save the configuration
+     * Save the configuration to disk
      */
     void save();
 
     /**
-     * Reload the configuration
+     * Reload the configuration from disk
      */
     void reload();
 
     /**
-     * Normalize the library-specific object
+     * Get the original underlying object (e.g., JsonObject, ConfigurationNode)
      *
-     * @param object the object
+     * @return the original instance
+     */
+    Object getOriginal();
+
+    /**
+     * Normalize a library-specific object to plain Java types
+     *
+     * @param object the object to normalize
      * @return the normalized object
      */
     Object normalize(Object object);
 
     /**
-     * Check if the object is normalizable
+     * Check if the object can be normalized
      *
      * @param object the object
-     * @return true if it is
+     * @return true if it is normalizable
      */
     boolean isNormalizable(Object object);
-
-    /**
-     * Remove the path from the configuration
-     *
-     * @param path the path
-     */
-    default void remove(String... path) {
-        if (path.length == 0) {
-            clear();
-        } else {
-            Object value = null;
-            set(value, path);
-        }
-    }
-
-    /**
-     * Remove all paths from the configuration
-     */
-    default void clear() {
-        getKeys(false).forEach(this::remove);
-    }
-
-    /**
-     * Get the value from the path
-     *
-     * @param path the path
-     * @return the value
-     */
-    default Object get(String... path) {
-        Object def = null;
-        return get(def, path);
-    }
-
-    /**
-     * Get the normalized value from the path
-     *
-     * @param def  the default value the default value if the value is not found
-     * @param path the path
-     * @return the value
-     */
-    default Object getNormalized(Object def, String... path) {
-        return normalizeObject(get(def, path));
-    }
-
-    /**
-     * Get the normalized value from the path
-     *
-     * @param path the path
-     * @return the value
-     */
-    default Object getNormalized(String... path) {
-        return getNormalized(null, path);
-    }
-
-    /**
-     * Get the value from the path
-     *
-     * @param type the type class of the value
-     * @param def  the default value if the value is not found
-     * @param path the path
-     * @param <T>  the type of the value
-     * @return the value
-     */
-    default <T> T get(Class<T> type, T def, String... path) {
-        if (type == Object.class) {
-            return type.cast(get(def, path));
-        }
-        Object normalized = normalizeObject(get(def, path));
-        if (type == String.class) {
-            return normalized != null ? type.cast(String.valueOf(normalized)) : def;
-        }
-        return type.isInstance(normalized) ? type.cast(normalized) : def;
-    }
-
-    /**
-     * Get the value from the path
-     *
-     * @param type the type class of the value
-     * @param path the path
-     * @param <T>  the type of the value
-     * @return the value
-     */
-    default <T> T get(Class<T> type, String... path) {
-        return get(type, null, path);
-    }
-
-    /**
-     * Check if the value of the path matches the type
-     *
-     * @param type the type class of the value
-     * @param path the path
-     * @return true if it does
-     */
-    default boolean isInstance(Class<?> type, String... path) {
-        return type.isInstance(get(path));
-    }
-
-    /**
-     * Get all keys from the path
-     *
-     * @param deep should we go deeper from the path?
-     * @param path the path
-     * @return the keys
-     */
-    default Set<String[]> getKeys(boolean deep, String... path) {
-        return getValues(deep, path).keySet();
-    }
-
-    /**
-     * Get all normalized values from the path
-     *
-     * @param deep should we go deeper from the path?
-     * @param path the path
-     * @return the values
-     */
-    default Map<String[], Object> getNormalizedValues(boolean deep, String... path) {
-        Map<String[], Object> normalized = new LinkedHashMap<>();
-        getValues(deep, path).forEach((k, v) -> normalized.put(k, normalizeObject(v)));
-        return normalized;
-    }
-
-    /**
-     * Normalize the object and its elements if it is a map or a collection
-     *
-     * @param object the object
-     * @return the normalized object
-     */
-    default Object normalizeObject(Object object) {
-        Object normalizedValue = isNormalizable(object) ? normalize(object) : object;
-        if (normalizedValue instanceof Map) {
-            Map<Object, Object> normalizedMap = new LinkedHashMap<>();
-            ((Map<?, ?>) normalizedValue).forEach((k, v) -> normalizedMap.put(k, normalizeObject(v)));
-            normalizedValue = normalizedMap;
-        } else if (normalizedValue instanceof Collection) {
-            List<Object> normalizedList = new ArrayList<>();
-            ((Collection<?>) normalizedValue).forEach(v -> normalizedList.add(normalizeObject(v)));
-            normalizedValue = normalizedList;
-        }
-        return normalizedValue;
-    }
-
-    /**
-     * Set the value to the path if it is not already set
-     *
-     * @param value the value
-     * @param path  the path
-     */
-    default void setIfAbsent(Object value, String... path) {
-        if (!contains(path)) {
-            set(value, path);
-        }
-    }
-
-    /**
-     * Set the values to the path if they are not already set
-     *
-     * @param map the map of values
-     */
-    default void setIfAbsent(Map<String[], Object> map) {
-        map.forEach((k, v) -> setIfAbsent(v, k));
-    }
-
-    /**
-     * Get the comment.
-     * This is a default empty method. The implementation can override this method to support comments.
-     *
-     * @param type the comment type
-     * @param path the path
-     * @return the comment
-     */
-    default List<String> getComment(CommentType type, String... path) {
-        return Collections.emptyList();
-    }
-
-    /**
-     * Set the comment
-     * This is a default empty method. The implementation can override this method to support comments.
-     *
-     * @param type  the comment type
-     * @param value the comment, can be null to remove the comment
-     * @param path  the path
-     */
-    default void setComment(CommentType type, List<String> value, String... path) {
-        // EMPTY
-    }
-
-    /**
-     * Get the block comment
-     *
-     * @param path the path
-     * @return the comment
-     * @see #getComment(CommentType, String[])
-     */
-    default List<String> getComment(String... path) {
-        return getComment(CommentType.BLOCK, path);
-    }
-
-    /**
-     * Set the block comment
-     *
-     * @param path  the path
-     * @param value the comment, can be null to remove the comment
-     * @see #setComment(CommentType, List, String[])
-     */
-    default void setComment(List<String> value, String... path) {
-        setComment(CommentType.BLOCK, value, path);
-    }
 }

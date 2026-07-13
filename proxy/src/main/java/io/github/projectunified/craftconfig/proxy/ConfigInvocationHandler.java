@@ -16,8 +16,6 @@ import java.util.stream.Stream;
 
 /**
  * The internal invocation handler to map the interface to the config
- *
- * @param <T> The type of the interface
  */
 public class ConfigInvocationHandler<T> implements InvocationHandler {
     private static final DefaultMethodHandler DEFAULT_METHOD_HANDLER;
@@ -31,30 +29,22 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         }
     }
 
-    private final Map<String, ConfigNode> nodes = new HashMap<>();
+    private final Map<String, MethodConfigNode> nodes = new HashMap<>();
     private final Class<T> clazz;
     private final Config config;
     private final boolean stickyValue;
 
-    /**
-     * Constructor
-     *
-     * @param clazz       The interface
-     * @param config      The config
-     * @param stickyValue True if the value should be sticky (store the value in the cache)
-     * @param addDefault  True if the default value should be added to the config
-     */
     ConfigInvocationHandler(Class<T> clazz, Config config, boolean stickyValue, boolean addDefault) {
         this.clazz = clazz;
         this.config = config;
         this.stickyValue = stickyValue;
 
-        Stream<ConfigNode> configNodes = Arrays.stream(this.clazz.getDeclaredMethods())
+        Stream<MethodConfigNode> configNodes = Arrays.stream(this.clazz.getDeclaredMethods())
                 .sorted(ConfigInvocationHandler::compareMethod)
                 .flatMap(method -> this.setupMethod(method).map(Stream::of).orElseGet(Stream::empty));
 
         if (addDefault) {
-            configNodes.forEach(ConfigNode::addDefault);
+            configNodes.forEach(MethodConfigNode::addDefault);
             this.setupClassComment();
             this.config.save();
         }
@@ -77,12 +67,6 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         return Integer.compare(configPath1.priority(), configPath2.priority());
     }
 
-    /**
-     * Check if the class is a primitive type
-     *
-     * @param clazz The class
-     * @return True if the class is a primitive type
-     */
     private static boolean isPrimitiveOrWrapper(Class<?> clazz) {
         return clazz.isPrimitive() || clazz.isAssignableFrom(Boolean.class) || clazz.isAssignableFrom(Byte.class)
                 || clazz.isAssignableFrom(Character.class) || clazz.isAssignableFrom(Short.class)
@@ -90,31 +74,17 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
                 || clazz.isAssignableFrom(Float.class) || clazz.isAssignableFrom(Double.class);
     }
 
-    /**
-     * Check if the method is a void method
-     *
-     * @param method The method
-     * @return True if the method is a void method
-     */
     private static boolean isVoidMethod(Method method) {
         return method.getReturnType() == void.class || method.getReturnType() == Void.class;
     }
 
-    /**
-     * Set up the class comment
-     */
     private void setupClassComment() {
         if (clazz.isAnnotationPresent(Comment.class) && config.getComment().isEmpty()) {
             config.setComment(Arrays.asList(clazz.getAnnotation(Comment.class).value()));
         }
     }
 
-    /**
-     * Set up the methods
-     *
-     * @param method The method
-     */
-    private Optional<ConfigNode> setupMethod(Method method) {
+    private Optional<MethodConfigNode> setupMethod(Method method) {
         if (!method.isDefault() || method.getParameterCount() != 0) {
             return Optional.empty();
         }
@@ -132,7 +102,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
 
         try {
             Object value = DEFAULT_METHOD_HANDLER.invoke(method);
-            ConfigNode node = new ConfigNode(
+            MethodConfigNode node = new MethodConfigNode(
                     path, config, DefaultConverterManager.getConverterIfDefault(method.getGenericReturnType(), configPath.converter()), value,
                     method.isAnnotationPresent(Comment.class) ? Arrays.asList(method.getAnnotation(Comment.class).value()) : Collections.emptyList(),
                     stickyValue || method.isAnnotationPresent(StickyValue.class)
@@ -157,7 +127,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             return proxy == args[0];
         } else if ((name.equals("reloadConfig") || name.equals("reload")) && !method.isDefault() && method.getParameterCount() == 0) {
             config.reload();
-            nodes.values().forEach(ConfigNode::clearCache);
+            nodes.values().forEach(MethodConfigNode::clearCache);
             return null;
         } else if (!isVoidMethod(method) && method.isDefault() && method.getParameterCount() == 0 && method.isAnnotationPresent(ConfigPath.class)) {
             String methodName = extractMethodName(name);

@@ -5,6 +5,7 @@ import io.github.projectunified.craftconfig.annotation.ConfigPath;
 import io.github.projectunified.craftconfig.annotation.StickyValue;
 import io.github.projectunified.craftconfig.common.CommentType;
 import io.github.projectunified.craftconfig.common.Config;
+import io.github.projectunified.craftconfig.common.ConfigNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,9 +40,9 @@ class ConfigGeneratorTest {
     @Test
     void getterReturnsConfigValueWhenSet() {
         TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
-        config.set("custom", "name");
-        config.set(8080, "port");
-        config.set(false, "enabled");
+        config.node("name").set("custom");
+        config.node("port").set(8080);
+        config.node("enabled").set(false);
 
         assertEquals("custom", proxy.getName());
         assertEquals(8080, proxy.getPort());
@@ -51,9 +52,9 @@ class ConfigGeneratorTest {
     @Test
     void isGetterReadsFromCorrectPath() {
         TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
-        config.set(true, "debug");
+        config.node("debug").set(true);
         assertTrue(proxy.isDebug());
-        config.set(false, "debug");
+        config.node("debug").set(false);
         assertFalse(proxy.isDebug());
     }
 
@@ -61,7 +62,7 @@ class ConfigGeneratorTest {
     void setterSetsValueAndSaves() {
         TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config);
         proxy.setName("newValue");
-        assertEquals("newValue", config.get("name"));
+        assertEquals("newValue", config.node("name").get());
         assertTrue(config.saved);
     }
 
@@ -69,7 +70,7 @@ class ConfigGeneratorTest {
     void setterClearsCache() {
         TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config, true, true);
         proxy.getName();
-        config.set("cached", "name");
+        config.node("name").set("cached");
         proxy.setName("newValue");
         assertEquals("newValue", proxy.getName());
     }
@@ -85,7 +86,7 @@ class ConfigGeneratorTest {
     void reloadConfigReloadsAndClearsCaches() {
         TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config, true, true);
         proxy.getName();
-        config.set("reloaded", "name");
+        config.node("name").set("reloaded");
         config.reloaded = false;
         proxy.reloadConfig();
         assertTrue(config.reloaded);
@@ -120,15 +121,15 @@ class ConfigGeneratorTest {
     @Test
     void addDefaultSetsDefaultsInConfig() {
         ConfigGenerator.newInstance(TestConfigProxy.class, config, true, false, true);
-        assertEquals("default", config.get("name"));
-        assertEquals(42, config.get("port"));
-        assertEquals(true, config.get("enabled"));
+        assertEquals("default", config.node("name").get());
+        assertEquals(42, config.node("port").get());
+        assertEquals(true, config.node("enabled").get());
     }
 
     @Test
     void commentAnnotationSetsCommentOnFirstSetup() {
         ConfigGenerator.newInstance(CommentedConfig.class, config, true, false, true);
-        List<String> comment = config.getComment("name");
+        List<String> comment = config.node("name").getComment();
         assertEquals(Arrays.asList("This is the name"), comment);
     }
 
@@ -136,7 +137,7 @@ class ConfigGeneratorTest {
     void nestedPathWorksCorrectly() {
         TestConfigProxy proxy = ConfigGenerator.newInstance(TestConfigProxy.class, config, true, false, true);
         assertEquals("nestedDefault", proxy.getNestedValue());
-        config.set("customNested", "server", "name");
+        config.node("server", "name").set("customNested");
         assertEquals("customNested", proxy.getNestedValue());
     }
 
@@ -150,7 +151,7 @@ class ConfigGeneratorTest {
     void stickyValueReturnsCachedValue() {
         StickyConfig proxy = ConfigGenerator.newInstance(StickyConfig.class, config, true, true, true);
         assertEquals("sticky", proxy.getStickyValue());
-        config.set("changed", "value");
+        config.node("value").set("changed");
         assertEquals("sticky", proxy.getStickyValue());
     }
 
@@ -158,7 +159,7 @@ class ConfigGeneratorTest {
     void nonStickyValueReturnsLatestValue() {
         NonStickyConfig proxy = ConfigGenerator.newInstance(NonStickyConfig.class, config, true, false, true);
         assertEquals("nonSticky", proxy.getNonStickyValue());
-        config.set("changed", "value");
+        config.node("value").set("changed");
         assertEquals("changed", proxy.getNonStickyValue());
     }
 
@@ -166,7 +167,7 @@ class ConfigGeneratorTest {
     void reloadClearsStickyCache() {
         StickyConfig proxy = ConfigGenerator.newInstance(StickyConfig.class, config, true, true, true);
         assertEquals("sticky", proxy.getStickyValue());
-        config.set("changed", "value");
+        config.node("value").set("changed");
         proxy.reloadConfig();
         assertEquals("changed", proxy.getStickyValue());
     }
@@ -273,54 +274,35 @@ class ConfigGeneratorTest {
         }
 
         @Override
-        public Object get(Object def, String... path) {
-            return data.getOrDefault(joinPath(path), def);
-        }
-
-        @Override
-        public Object get(String... path) {
-            return data.getOrDefault(joinPath(path), null);
-        }
-
-        @Override
-        public boolean contains(String... path) {
-            return data.containsKey(joinPath(path));
-        }
-
-        @Override
-        public void set(Object value, String... path) {
-            String key = joinPath(path);
-            if (value == null) {
-                data.remove(key);
-            } else {
-                data.put(key, value);
-            }
-        }
-
-        @Override
         public String getName() {
             return "test-config";
         }
 
         @Override
-        public Map<String[], Object> getValues(boolean deep, String... path) {
-            Map<String[], Object> result = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> entry : data.entrySet()) {
-                String[] parts = entry.getKey().split("\0", -1);
-                if (parts.length >= path.length) {
-                    boolean matches = true;
-                    for (int i = 0; i < path.length; i++) {
-                        if (!path[i].equals(parts[i])) {
-                            matches = false;
-                            break;
-                        }
-                    }
-                    if (matches) {
-                        if (deep || parts.length == path.length) {
-                            result.put(parts, entry.getValue());
-                        }
-                    }
-                }
+        public ConfigNode node(String... path) {
+            return new SimpleConfigNode(this, path);
+        }
+
+        @Override
+        public Object get() {
+            return null;
+        }
+
+        @Override
+        public void set(Object value) {
+        }
+
+        @Override
+        public void remove() {
+            data.clear();
+        }
+
+        @Override
+        public Map<String, ConfigNode> getChildren() {
+            Map<String, ConfigNode> result = new LinkedHashMap<>();
+            for (String key : data.keySet()) {
+                String[] parts = key.split("\0", -1);
+                result.put(parts[parts.length - 1], new SimpleConfigNode(this, parts));
             }
             return result;
         }
@@ -351,30 +333,129 @@ class ConfigGeneratorTest {
         }
 
         @Override
-        public List<String> getComment(String... path) {
-            return comments.getOrDefault(joinPath(path), Collections.emptyList());
+        public List<String> getComment(CommentType type) {
+            return type == CommentType.BLOCK ? classComment : Collections.emptyList();
         }
 
         @Override
-        public void setComment(List<String> value, String... path) {
-            if (path.length == 0) {
+        public void setComment(CommentType type, List<String> value) {
+            if (type == CommentType.BLOCK) {
                 classComment = value != null ? value : Collections.emptyList();
-            } else {
-                comments.put(joinPath(path), value);
             }
         }
 
-        @Override
-        public List<String> getComment(CommentType type, String... path) {
-            if (path.length == 0) {
-                return classComment;
-            }
-            return comments.getOrDefault(joinPath(path), Collections.emptyList());
-        }
+        private static class SimpleConfigNode implements ConfigNode {
+            private final SimpleMapConfig config;
+            private final String[] path;
+            private final ConfigNode parent;
 
-        @Override
-        public void setComment(CommentType type, List<String> value, String... path) {
-            setComment(value, path);
+            SimpleConfigNode(SimpleMapConfig config, String[] path) {
+                this(config, path, null);
+            }
+
+            SimpleConfigNode(SimpleMapConfig config, String[] path, ConfigNode parent) {
+                this.config = config;
+                this.path = path;
+                this.parent = parent;
+            }
+
+            private static String joinPath(String... path) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < path.length; i++) {
+                    if (i > 0) sb.append('\0');
+                    sb.append(path[i]);
+                }
+                return sb.toString();
+            }
+
+            @Override
+            public String[] getPath() {
+                return path;
+            }
+
+            @Override
+            public ConfigNode getParent() {
+                return parent;
+            }
+
+            @Override
+            public Config getConfig() {
+                return config;
+            }
+
+            @Override
+            public Object get() {
+                return config.data.getOrDefault(joinPath(path), null);
+            }
+
+            @Override
+            public void set(Object value) {
+                String key = joinPath(path);
+                if (value == null) {
+                    config.data.remove(key);
+                } else {
+                    config.data.put(key, value);
+                }
+            }
+
+            @Override
+            public ConfigNode node(String... childPath) {
+                String[] fullPath = new String[path.length + childPath.length];
+                System.arraycopy(path, 0, fullPath, 0, path.length);
+                System.arraycopy(childPath, 0, fullPath, path.length, childPath.length);
+                return new SimpleConfigNode(config, fullPath, this);
+            }
+
+            @Override
+            public boolean exists() {
+                return config.data.containsKey(joinPath(path));
+            }
+
+            @Override
+            public void remove() {
+                config.data.remove(joinPath(path));
+            }
+
+            @Override
+            public boolean hasChild() {
+                return !getChildren().isEmpty();
+            }
+
+            @Override
+            public Map<String, ConfigNode> getChildren() {
+                Map<String, ConfigNode> result = new LinkedHashMap<>();
+                String prefix = joinPath(path);
+                for (String key : config.data.keySet()) {
+                    if (key.startsWith(prefix) && !key.equals(prefix)) {
+                        String[] parts = key.split("\0", -1);
+                        if (parts.length == path.length + 1) {
+                            result.put(parts[parts.length - 1], new SimpleConfigNode(config, parts));
+                        }
+                    }
+                }
+                return result;
+            }
+
+            @Override
+            public Object getNormalized() {
+                return get();
+            }
+
+            @Override
+            public List<String> getComment(CommentType type) {
+                return config.comments.getOrDefault(joinPath(path), Collections.emptyList());
+            }
+
+            @Override
+            public void setComment(CommentType type, List<String> value) {
+                if (path.length == 0) {
+                    config.setComment(type, value);
+                } else {
+                    if (value != null) {
+                        config.comments.put(joinPath(path), value);
+                    }
+                }
+            }
         }
     }
 }

@@ -38,7 +38,6 @@ public final class DefaultConverterManager {
     }
 
     private DefaultConverterManager() {
-        // EMPTY
     }
 
     /**

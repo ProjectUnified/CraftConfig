@@ -1,8 +1,9 @@
 package io.github.projectunified.craftconfig.bungeecord;
 
+import io.github.projectunified.craftconfig.common.CommentType;
 import io.github.projectunified.craftconfig.common.Config;
 import io.github.projectunified.craftconfig.common.ConfigLogger;
-import io.github.projectunified.craftconfig.common.PathString;
+import io.github.projectunified.craftconfig.common.ConfigNode;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.config.Configuration;
 import net.md_5.bungee.config.ConfigurationProvider;
@@ -10,11 +11,16 @@ import net.md_5.bungee.config.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static io.github.projectunified.craftconfig.common.PathString.joinDefault;
-import static io.github.projectunified.craftconfig.common.PathString.splitDefault;
 
+/**
+ * The bungeecord configuration
+ */
 public class BungeeConfig implements Config {
     private final File file;
     private Configuration configuration = new Configuration();
@@ -33,35 +39,8 @@ public class BungeeConfig implements Config {
     }
 
     @Override
-    public Object get(Object def, String... path) {
-        return this.configuration.get(joinDefault(path), def);
-    }
-
-    @Override
-    public void set(Object value, String... path) {
-        this.configuration.set(joinDefault(path), value);
-    }
-
-    @Override
-    public boolean contains(String... path) {
-        return this.configuration.contains(joinDefault(path));
-    }
-
-    @Override
     public String getName() {
         return this.file.getName();
-    }
-
-    @Override
-    public Map<String[], Object> getValues(boolean deep, String... path) {
-        if (path.length == 0) {
-            return splitDefault(this.getValues(configuration, deep));
-        } else {
-            return Optional.ofNullable(configuration.getSection(joinDefault(path)))
-                    .map(section -> this.getValues(section, deep))
-                    .map(PathString::splitDefault)
-                    .orElse(Collections.emptyMap());
-        }
     }
 
     @Override
@@ -85,11 +64,6 @@ public class BungeeConfig implements Config {
     }
 
     @Override
-    public void clear() {
-        this.configuration = new Configuration();
-    }
-
-    @Override
     public void save() {
         try {
             ConfigurationProvider.getProvider(YamlConfiguration.class).save(this.configuration, this.file);
@@ -106,7 +80,13 @@ public class BungeeConfig implements Config {
     @Override
     public Object normalize(Object object) {
         if (object instanceof Configuration) {
-            return this.getValues((Configuration) object, false);
+            return ((Configuration) object).getKeys().stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            key -> key,
+                            key -> ((Configuration) object).get(key),
+                            (a, b) -> b,
+                            LinkedHashMap::new
+                    ));
         }
         return object;
     }
@@ -116,15 +96,138 @@ public class BungeeConfig implements Config {
         return object instanceof Configuration;
     }
 
-    private Map<String, Object> getValues(Configuration section, boolean deep) {
-        Collection<String> keys = section.getKeys();
-        if (!deep) {
-            keys.removeIf(s -> s.indexOf('.') >= 0);
+    @Override
+    public Object get() {
+        return this.configuration;
+    }
+
+    @Override
+    public void set(Object value) {
+        if (value == null) {
+            this.remove();
+        } else {
+            throw new IllegalArgumentException("You cannot set the whole configuration to a value");
         }
-        Map<String, Object> values = new LinkedHashMap<>();
-        for (String key : keys) {
-            values.put(key, section.get(key));
+    }
+
+    @Override
+    public ConfigNode node(String... path) {
+        if (path.length == 0) {
+            return this;
         }
-        return values;
+        return new BungeeConfigNode(path, this, this.configuration);
+    }
+
+    @Override
+    public void remove() {
+        this.configuration = new Configuration();
+    }
+
+    @Override
+    public Map<String, ConfigNode> getChildren() {
+        Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+        for (String key : this.configuration.getKeys()) {
+            nodes.put(key, new BungeeConfigNode(new String[]{key}, this, this.configuration));
+        }
+        return nodes;
+    }
+
+    @Override
+    public List<String> getComment(CommentType type) {
+        return Collections.emptyList();
+    }
+
+    @Override
+    public void setComment(CommentType type, List<String> value) {
+    }
+
+    /**
+     * BungeeCord implementation of {@link ConfigNode}.
+     */
+    public class BungeeConfigNode implements ConfigNode {
+        private final String[] path;
+        private final ConfigNode parent;
+        private final Configuration section;
+
+        BungeeConfigNode(String[] path, ConfigNode parent, Configuration section) {
+            this.path = path;
+            this.parent = parent;
+            this.section = section;
+        }
+
+        @Override
+        public String[] getPath() {
+            return path;
+        }
+
+        @Override
+        public ConfigNode getParent() {
+            return parent;
+        }
+
+        @Override
+        public Config getConfig() {
+            return BungeeConfig.this;
+        }
+
+        @Override
+        public Object get() {
+            return section.get(joinDefault(path));
+        }
+
+        @Override
+        public void set(Object value) {
+            section.set(joinDefault(path), value);
+        }
+
+        @Override
+        public ConfigNode node(String... path) {
+            if (path.length == 0) {
+                return this;
+            }
+            Configuration childSection = this.section.getSection(joinDefault(getPath()));
+            if (childSection == null) {
+                throw new IllegalStateException("The node is not a configuration section");
+            }
+            return new BungeeConfigNode(path, this, childSection);
+        }
+
+        @Override
+        public void remove() {
+            section.set(joinDefault(path), null);
+        }
+
+        @Override
+        public boolean hasChild() {
+            return section.getSection(joinDefault(path)) != null;
+        }
+
+        @Override
+        public Map<String, ConfigNode> getChildren() {
+            Configuration currentSection = section.getSection(joinDefault(path));
+            if (currentSection == null) {
+                throw new IllegalStateException("The node is not a configuration section");
+            }
+            Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+            for (String key : currentSection.getKeys()) {
+                nodes.put(key, new BungeeConfigNode(new String[]{key}, this, currentSection));
+            }
+            return nodes;
+        }
+
+        @Override
+        public Object getNormalized() {
+            Object value = section.get(joinDefault(path));
+            return BungeeConfig.this.normalize(value);
+        }
+
+        @Override
+        public List<String> getComment(CommentType type) {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public void setComment(CommentType type, List<String> value) {
+        }
     }
 }
