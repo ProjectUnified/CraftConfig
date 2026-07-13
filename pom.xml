@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
 
     <name>CraftConfig</name>
-    <description>A config library</description>
+    <description>A config interface for various config libraries</description>
     <url>https://github.com/ProjectUnified/${project.name}</url>
 
     <licenses>
