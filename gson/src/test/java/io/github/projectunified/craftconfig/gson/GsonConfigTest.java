@@ -3,6 +3,7 @@ package io.github.projectunified.craftconfig.gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import io.github.projectunified.craftconfig.common.ConfigNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -10,6 +11,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -219,5 +221,145 @@ class GsonConfigTest {
         }
         GsonConfig config = new GsonConfig(file);
         assertDoesNotThrow(config::setup);
+    }
+
+    @Test
+    void nestedNodeGetSet() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("a", "b", "c").set("deep");
+
+        assertEquals("deep", config.node("a", "b", "c").get(String.class));
+        assertNotNull(config.node("a").get());
+        assertNotNull(config.node("a", "b").get());
+    }
+
+    @Test
+    void nestedNodeGetChildren() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("parent", "child1").set("v1");
+        config.node("parent", "child2").set("v2");
+
+        ConfigNode parent = config.node("parent");
+        assertTrue(parent.hasChild());
+        Map<String, ConfigNode> children = parent.getChildren();
+        assertEquals(2, children.size());
+        assertTrue(children.containsKey("child1"));
+        assertTrue(children.containsKey("child2"));
+        assertEquals("v1", children.get("child1").get(String.class));
+        assertEquals("v2", children.get("child2").get(String.class));
+    }
+
+    @Test
+    void nodeReturnsSameForEmptyPath() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        ConfigNode sameNode = config.node();
+        assertSame(config, sameNode);
+    }
+
+    @Test
+    void childNodeReturnsSameForEmptyPath() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("key").set("value");
+        ConfigNode node = config.node("key");
+        assertSame(node, node.node());
+    }
+
+    @Test
+    void nodeHasChildReturnsTrueForObjects() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("child", "key").set("value");
+        assertTrue(config.node("child").hasChild());
+        assertFalse(config.node("child", "key").hasChild());
+    }
+
+    @Test
+    void chainedNodeNavigation() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("a", "b", "c", "d").set("deep");
+
+        ConfigNode nodeA = config.node("a");
+        ConfigNode nodeB = nodeA.node("b");
+        ConfigNode nodeC = nodeB.node("c");
+        ConfigNode nodeD = nodeC.node("d");
+
+        assertEquals("deep", nodeD.get(String.class));
+        assertEquals("deep", nodeC.node("d").get(String.class));
+        assertEquals("deep", nodeB.node("c", "d").get(String.class));
+        assertEquals("deep", nodeA.node("b", "c", "d").get(String.class));
+    }
+
+    @Test
+    void nodeGetParentAndPath() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("level1", "level2", "level3").set("value");
+
+        ConfigNode node = config.node("level1", "level2", "level3");
+        assertArrayEquals(new String[]{"level1", "level2", "level3"}, node.getPath());
+        assertNotNull(node.getParent());
+    }
+
+    @Test
+    void nodeGetConfig() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("key").set("value");
+
+        ConfigNode node = config.node("key");
+        assertSame(config, node.getConfig());
+    }
+
+    @Test
+    void nodeGetChildrenChained() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("server", "world", "spawn").set("0,0,0");
+        config.node("server", "world", "name").set("world_nether");
+
+        ConfigNode serverNode = config.node("server");
+        ConfigNode worldNode = serverNode.node("world");
+
+        assertTrue(worldNode.hasChild());
+        Map<String, ConfigNode> worldChildren = worldNode.getChildren();
+        assertEquals(2, worldChildren.size());
+        assertEquals("0,0,0", worldChildren.get("spawn").get(String.class));
+    }
+
+    @Test
+    void nodeSetAndGetChained() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+
+        config.node("game", "mode").set("survival");
+        config.node("game", "difficulty").set("hard");
+        config.node("game", "rules", "doDaylightCycle").set(false);
+
+        assertEquals("survival", config.node("game", "mode").get(String.class));
+        assertEquals("hard", config.node("game", "difficulty").get(String.class));
+        assertFalse(config.node("game", "rules", "doDaylightCycle").get(Boolean.class));
+    }
+
+    @Test
+    void nodeRemoveChained() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("a", "b", "c").set("value");
+        assertNotNull(config.node("a", "b", "c").get());
+
+        config.node("a", "b").node("c").remove();
+        assertNull(config.node("a", "b", "c").get());
+    }
+
+    @Test
+    void nodeExistsChained() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("exists", "path").set("yes");
+
+        assertTrue(config.node("exists", "path").exists());
+        assertFalse(config.node("not", "exists").exists());
+    }
+
+    @Test
+    void nodeNormalizeChained() {
+        GsonConfig config = new GsonConfig(getTestFile("test.json"));
+        config.node("nested", "value").set("test");
+
+        Object normalized = config.node("nested", "value").getNormalized();
+        assertNotNull(normalized);
     }
 }
