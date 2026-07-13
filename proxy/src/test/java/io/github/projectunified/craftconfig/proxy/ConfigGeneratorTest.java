@@ -300,6 +300,78 @@ class ConfigGeneratorTest {
         assertEquals("newValue", config.node("middle", "inner", "value").get(String.class));
     }
 
+    // === Interface Inheritance Tests ===
+
+    @Test
+    void childConfigInheritsParentDefaults() {
+        ChildConfig proxy = ConfigGenerator.newInstance(ChildConfig.class, config, true, false, true);
+        assertEquals("localhost", proxy.host());
+        assertEquals(25565, proxy.port());
+        assertEquals("A Server", proxy.motd());
+    }
+
+    @Test
+    void childConfigReadsParentValuesFromConfig() {
+        config.node("host").set("10.0.0.1");
+        config.node("port").set(8080);
+        config.node("motd").set("Custom Server");
+
+        ChildConfig proxy = ConfigGenerator.newInstance(ChildConfig.class, config, false);
+        assertEquals("10.0.0.1", proxy.host());
+        assertEquals(8080, proxy.port());
+        assertEquals("Custom Server", proxy.motd());
+    }
+
+    @Test
+    void childConfigSetsParentValues() {
+        ChildConfig proxy = ConfigGenerator.newInstance(ChildConfig.class, config);
+        proxy.host("example.com");
+        proxy.port(9090);
+        proxy.motd("Hello");
+
+        assertEquals("example.com", config.node("host").get(String.class));
+        assertEquals(9090, config.node("port").get(Integer.class));
+        assertEquals("Hello", config.node("motd").get(String.class));
+    }
+
+    @Test
+    void childConfigPrefixGettersWorkForInheritedMethods() {
+        ChildConfig proxy = ConfigGenerator.newInstance(ChildConfig.class, config);
+        assertEquals("localhost", proxy.getHost());
+        assertEquals(25565, proxy.getPort());
+    }
+
+    @Test
+    void childConfigPrefixSettersWorkForInheritedMethods() {
+        ChildConfig proxy = ConfigGenerator.newInstance(ChildConfig.class, config);
+        proxy.setHost("newhost");
+        proxy.setPort(1234);
+        assertEquals("newhost", config.node("host").get(String.class));
+        assertEquals(1234, config.node("port").get(Integer.class));
+    }
+
+    @Test
+    void childConfigOverridesParentDefault() {
+        OverridingChildConfig proxy = ConfigGenerator.newInstance(OverridingChildConfig.class, config, true, false, true);
+        assertEquals("overridden-host", proxy.host());
+        assertEquals("Overridden Server", proxy.motd());
+    }
+
+    @Test
+    void childConfigOverrideDefaultWrittenToConfig() {
+        OverridingChildConfig proxy = ConfigGenerator.newInstance(OverridingChildConfig.class, config, true, false, true);
+        assertEquals("overridden-host", config.node("host").get(String.class));
+        assertEquals("Overridden Server", config.node("motd").get(String.class));
+    }
+
+    @Test
+    void childConfigOverrideDefaultDoesNotOverwriteExistingValue() {
+        config.node("host").set("existing-host");
+        OverridingChildConfig proxy = ConfigGenerator.newInstance(OverridingChildConfig.class, config, false, false, true);
+        assertEquals("existing-host", proxy.host());
+        assertEquals("existing-host", config.node("host").get(String.class));
+    }
+
     // === Converter Tests ===
 
     @Test
@@ -454,6 +526,63 @@ class ConfigGeneratorTest {
         }
 
         void value(String value);
+    }
+
+    @ConfigNode
+    public interface ParentConfig {
+        @ConfigPath("host")
+        default String host() {
+            return "localhost";
+        }
+
+        void host(String value);
+
+        @ConfigPath("host")
+        default String getHost() {
+            return "localhost";
+        }
+
+        void setHost(String value);
+
+        @ConfigPath("port")
+        default int port() {
+            return 25565;
+        }
+
+        void port(int value);
+
+        @ConfigPath("port")
+        default int getPort() {
+            return 25565;
+        }
+
+        void setPort(int value);
+    }
+
+    @ConfigNode
+    public interface ChildConfig extends ParentConfig {
+        @ConfigPath("motd")
+        default String motd() {
+            return "A Server";
+        }
+
+        void motd(String value);
+    }
+
+    @ConfigNode
+    public interface OverridingChildConfig extends ParentConfig {
+        @Override
+        @ConfigPath("host")
+        default String host() {
+            return "overridden-host";
+        }
+
+        @ConfigPath("motd")
+        default String motd() {
+            return "Overridden Server";
+        }
+
+        void motd(String value);
     }
 
     @ConfigNode

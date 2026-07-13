@@ -35,7 +35,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
     }
 
     private void setupDefaults() {
-        for (Method method : clazz.getDeclaredMethods()) {
+        for (Method method : getAllDeclaredMethods(clazz)) {
             if (!method.isAnnotationPresent(ConfigPath.class)) continue;
             if (method.getParameterCount() != 0) continue;
             if (method.getReturnType() == void.class || method.getReturnType() == Void.class) continue;
@@ -76,9 +76,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             node.setComment(Arrays.asList(clazz.getAnnotation(Comment.class).value()));
         }
 
-        if (node instanceof Config) {
-            ((Config) node).save();
-        }
+        node.getConfig().save();
     }
 
     @Override
@@ -167,9 +165,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         node.node(path).set(converter.convertToRaw(value));
         cachedValues.remove(Arrays.asList(path));
 
-        if (node instanceof Config) {
-            ((Config) node).save();
-        }
+        node.getConfig().save();
 
         return null;
     }
@@ -184,7 +180,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         String baseName = stripPrefix(setterName);
         if (baseName == null) baseName = setterName;
 
-        for (Method method : clazz.getDeclaredMethods()) {
+        for (Method method : getAllDeclaredMethods(clazz)) {
             if (method.equals(setterMethod)) continue;
             if (method.getParameterCount() != 0) continue;
             if (method.getReturnType() == void.class) continue;
@@ -224,6 +220,24 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         return type.isAnnotationPresent(io.github.projectunified.craftconfig.annotation.ConfigNode.class)
                 && !type.equals(Config.class)
                 && !type.equals(ConfigNode.class);
+    }
+
+    private static List<Method> getAllDeclaredMethods(Class<?> clazz) {
+        Set<String> seen = new HashSet<>();
+        List<Method> result = new ArrayList<>();
+        Deque<Class<?>> queue = new ArrayDeque<>();
+        queue.add(clazz);
+        while (!queue.isEmpty()) {
+            Class<?> current = queue.poll();
+            for (Method method : current.getDeclaredMethods()) {
+                String key = method.getName() + Arrays.toString(method.getParameterTypes());
+                if (seen.add(key)) {
+                    result.add(method);
+                }
+            }
+            Collections.addAll(queue, current.getInterfaces());
+        }
+        return result;
     }
 
     @SuppressWarnings("unchecked")
