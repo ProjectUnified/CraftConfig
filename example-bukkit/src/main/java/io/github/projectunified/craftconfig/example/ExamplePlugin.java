@@ -30,8 +30,11 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Basic Usage ===");
 
         config.node("name").set("MyServer");
+        config.node("name").setComment(Arrays.asList("Server name displayed in the server list"));
         config.node("port").set(25565);
+        config.node("port").setComment(Arrays.asList("The port the server listens on"));
         config.node("debug").set(false);
+        config.node("debug").setComment(Arrays.asList("Enable debug mode for verbose logging"));
 
         getLogger().info("Name: " + config.node("name").get(String.class));
         getLogger().info("Port: " + config.node("port").get(Integer.class));
@@ -44,8 +47,11 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Node Navigation ===");
 
         config.node("database", "host").set("localhost");
+        config.node("database", "host").setComment(Arrays.asList("Database server hostname"));
         config.node("database", "port").set(3306);
+        config.node("database", "port").setComment(Arrays.asList("Database server port"));
         config.node("database", "name").set("mydb");
+        config.node("database", "name").setComment(Arrays.asList("Database name"));
 
         ConfigNode dbNode = config.node("database");
         getLogger().info("Database host: " + dbNode.node("host").get(String.class));
@@ -58,10 +64,15 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Chained Nodes ===");
 
         config.node("game", "world", "spawn", "x").set(0);
+        config.node("game", "world", "spawn", "x").setComment(Arrays.asList("Spawn X coordinate"));
         config.node("game", "world", "spawn", "y").set(64);
+        config.node("game", "world", "spawn", "y").setComment(Arrays.asList("Spawn Y coordinate"));
         config.node("game", "world", "spawn", "z").set(0);
+        config.node("game", "world", "spawn", "z").setComment(Arrays.asList("Spawn Z coordinate"));
         config.node("game", "world", "name").set("world_nether");
+        config.node("game", "world", "name").setComment(Arrays.asList("World name"));
         config.node("game", "world", "difficulty").set("normal");
+        config.node("game", "world", "difficulty").setComment(Arrays.asList("World difficulty", "Options: peaceful, easy, normal, hard"));
 
         ConfigNode gameNode = config.node("game");
         ConfigNode worldNode = gameNode.node("world");
@@ -79,10 +90,15 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Nested Nodes ===");
 
         config.node("permissions", "admin", "level").set(100);
+        config.node("permissions", "admin", "level").setComment(Arrays.asList("Admin permission level"));
         config.node("permissions", "admin", "ban").set(true);
+        config.node("permissions", "admin", "ban").setComment(Arrays.asList("Can ban players"));
         config.node("permissions", "admin", "kick").set(true);
+        config.node("permissions", "admin", "kick").setComment(Arrays.asList("Can kick players"));
         config.node("permissions", "user", "level").set(10);
+        config.node("permissions", "user", "level").setComment(Arrays.asList("User permission level"));
         config.node("permissions", "user", "chat").set(true);
+        config.node("permissions", "user", "chat").setComment(Arrays.asList("Can use chat"));
 
         ConfigNode permNode = config.node("permissions");
         ConfigNode adminNode = permNode.node("admin");
@@ -100,8 +116,11 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Children ===");
 
         config.node("items", "sword").set("diamond");
+        config.node("items", "sword").setComment(Arrays.asList("Sword material"));
         config.node("items", "pickaxe").set("iron");
+        config.node("items", "pickaxe").setComment(Arrays.asList("Pickaxe material"));
         config.node("items", "axe").set("wood");
+        config.node("items", "axe").setComment(Arrays.asList("Axe material"));
 
         ConfigNode itemsNode = config.node("items");
         Map<String, ConfigNode> items = itemsNode.getChildren();
@@ -118,8 +137,11 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Set If Absent ===");
 
         config.node("settings", "language").setIfAbsent("en");
+        config.node("settings", "language").setComment(Arrays.asList("Server language", "Default: en"));
         config.node("settings", "difficulty").setIfAbsent("normal");
+        config.node("settings", "difficulty").setComment(Arrays.asList("Game difficulty"));
         config.node("settings", "pvp").setIfAbsent(true);
+        config.node("settings", "pvp").setComment(Arrays.asList("Allow player vs player combat"));
 
         config.node("settings", "language").setIfAbsent("de");
         getLogger().info("Language (should be en): " + config.node("settings", "language").get(String.class));
@@ -131,6 +153,7 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("=== Node Operations ===");
 
         config.node("test", "path").set("exists");
+        config.node("test", "path").setComment(Arrays.asList("Test path for demonstration"));
 
         ConfigNode testNode = config.node("test", "path");
         getLogger().info("Path exists: " + testNode.exists());
