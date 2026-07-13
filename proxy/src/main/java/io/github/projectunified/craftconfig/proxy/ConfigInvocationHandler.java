@@ -107,7 +107,13 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
     }
 
     private void setupDefaults() {
-        for (Method method : allMethods) {
+        List<Method> sorted = new ArrayList<>(allMethods);
+        sorted.sort(Comparator.comparingInt(m -> {
+            ConfigPath cp = m.getAnnotation(ConfigPath.class);
+            return cp != null ? cp.priority() : 0;
+        }));
+
+        for (Method method : sorted) {
             ConfigPath configPath = method.getAnnotation(ConfigPath.class);
             if (configPath == null) continue;
             if (method.getParameterCount() != 0) continue;

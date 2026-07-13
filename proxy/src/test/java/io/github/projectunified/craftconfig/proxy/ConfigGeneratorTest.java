@@ -14,6 +14,7 @@ import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -429,6 +430,44 @@ class ConfigGeneratorTest {
         ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
         proxy.number(99);
         assertEquals(99.0, proxy.number().doubleValue(), 0.001);
+    }
+
+    // === Priority Tests ===
+
+    @Test
+    void priorityOrdersDefaultsByPriorityValue() {
+        ConfigGenerator.newInstance(PriorityConfig.class, config, true, false, true);
+
+        // All defaults should be written regardless of priority
+        assertEquals("z", config.node("zebra").get(String.class));
+        assertEquals("a", config.node("alpha").get(String.class));
+        assertEquals("m", config.node("middle").get(String.class));
+
+        // Verify ordering: alpha (10) before middle (20) before zebra (30)
+        List<String> keys = new ArrayList<>(config.node().getChildren().keySet());
+        int alphaIdx = keys.indexOf("alpha");
+        int middleIdx = keys.indexOf("middle");
+        int zebraIdx = keys.indexOf("zebra");
+        assertTrue(alphaIdx < middleIdx, "alpha should come before middle");
+        assertTrue(middleIdx < zebraIdx, "middle should come before zebra");
+    }
+
+    @ConfigNode
+    public interface PriorityConfig {
+        @ConfigPath(value = "zebra", priority = 30)
+        default String zebra() {
+            return "z";
+        }
+
+        @ConfigPath(value = "alpha", priority = 10)
+        default String alpha() {
+            return "a";
+        }
+
+        @ConfigPath(value = "middle", priority = 20)
+        default String middle() {
+            return "m";
+        }
     }
 
     @ConfigNode
