@@ -203,15 +203,17 @@ public class ExamplePlugin extends JavaPlugin {
 
         ServerProxy serverProxy = ConfigGenerator.newInstance(ServerProxy.class, config, false);
 
+        getLogger().info("Server host: " + serverProxy.host());
+        getLogger().info("Server port: " + serverProxy.port());
+        getLogger().info("Server motd: " + serverProxy.motd());
+        getLogger().info("Max players: " + serverProxy.maxPlayers());
+
         serverProxy.host("play.example.com");
         serverProxy.port(25565);
         serverProxy.motd("Welcome to Example Server!");
         serverProxy.maxPlayers(100);
 
-        getLogger().info("Server host: " + serverProxy.host());
-        getLogger().info("Server port: " + serverProxy.port());
-        getLogger().info("Server motd: " + serverProxy.motd());
-        getLogger().info("Max players: " + serverProxy.maxPlayers());
+        getLogger().info("Set back to original");
 
         config.save();
     }
