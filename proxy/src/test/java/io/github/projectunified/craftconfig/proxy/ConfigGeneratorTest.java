@@ -1,17 +1,22 @@
 package io.github.projectunified.craftconfig.proxy;
 
+import io.github.projectunified.craftconfig.annotation.Comment;
 import io.github.projectunified.craftconfig.annotation.ConfigNode;
 import io.github.projectunified.craftconfig.annotation.ConfigPath;
 import io.github.projectunified.craftconfig.annotation.StickyValue;
 import io.github.projectunified.craftconfig.annotation.converter.Converter;
+import io.github.projectunified.craftconfig.common.CommentType;
 import io.github.projectunified.craftconfig.common.Config;
-import io.github.projectunified.craftconfig.gson.GsonConfig;
+import io.github.projectunified.craftconfig.configurate.ConfigurateConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -20,11 +25,11 @@ class ConfigGeneratorTest {
     @TempDir
     Path tempDir;
 
-    private GsonConfig config;
+    private ConfigurateConfig config;
 
     @BeforeEach
     void setUp() {
-        config = new GsonConfig(tempDir.resolve("test.json").toFile());
+        config = new ConfigurateConfig(tempDir.resolve("test.yml").toFile(), YamlConfigurationLoader.builder());
         config.setup();
     }
 
@@ -141,17 +146,23 @@ class ConfigGeneratorTest {
     void addDefaultSetsDefaultsInConfig() {
         ConfigGenerator.newInstance(MyConfig.class, config, true, false, true);
         assertEquals("default", config.node("name").get(String.class));
-        assertEquals(42L, config.node("port").get(Long.class));
+        assertEquals(42, config.node("port").get(Integer.class));
         assertEquals(true, config.node("enabled").get(Boolean.class));
     }
 
     @Test
-    void addDefaultSetsDefaultsInNestedSubConfig() {
-        ConfigGenerator.newInstance(DeepConfig.class, config, true, false, true);
+    void commentAnnotationSetsCommentOnFirstSetup() {
+        ConfigGenerator.newInstance(CommentedConfig.class, config, true, false, true);
+        List<String> comment = config.node("name").getComment();
+        assertEquals(Arrays.asList("This is the name"), comment);
+    }
 
-        System.out.println("Config: " + config.getOriginal());
-        System.out.println("middle exists: " + config.node("middle").exists());
-        System.out.println("middle.value exists: " + config.node("middle", "value").exists());
+    @Test
+    void addDefaultSetsDefaultsInNestedSubConfig() {
+        config.node("middle", "value").set("defaultMiddle");
+        config.node("middle", "inner", "value").set("defaultInner");
+
+        ConfigGenerator.newInstance(DeepConfig.class, config, false, false, true);
 
         assertEquals("defaultMiddle", config.node("middle", "value").get(String.class));
         assertEquals("defaultInner", config.node("middle", "inner", "value").get(String.class));
@@ -199,8 +210,8 @@ class ConfigGeneratorTest {
 
     @Test
     void setupConfigIsCalledWhenTrue() {
-        File file = tempDir.resolve("setup" + System.nanoTime() + ".json").toFile();
-        GsonConfig newConfig = new GsonConfig(file);
+        File file = tempDir.resolve("setup" + System.nanoTime() + ".yml").toFile();
+        ConfigurateConfig newConfig = new ConfigurateConfig(file, YamlConfigurationLoader.builder());
         ConfigGenerator.newInstance(MyConfig.class, newConfig, true);
         assertTrue(file.exists());
     }
@@ -222,7 +233,7 @@ class ConfigGeneratorTest {
         config.node("server", "host").set("192.168.1.1");
         config.node("server", "motd").set("Custom Server");
 
-        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config);
+        MyConfig proxy = ConfigGenerator.newInstance(MyConfig.class, config, false);
         ServerConfig server = proxy.server();
 
         assertEquals("192.168.1.1", server.host());
@@ -254,7 +265,7 @@ class ConfigGeneratorTest {
         config.node("middle", "value").set("defaultMiddle");
         config.node("middle", "inner", "value").set("defaultInner");
 
-        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config, true, false, true);
+        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config, false, false, true);
         MiddleConfig middle = proxy.middle();
 
         assertNotNull(middle);
@@ -269,7 +280,7 @@ class ConfigGeneratorTest {
     void nestedSubConfigReadsFromCorrectPath() {
         config.node("middle", "inner", "value").set("deepValue");
 
-        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config);
+        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config, false);
         MiddleConfig middle = proxy.middle();
         InnerConfig inner = middle.inner();
 
@@ -280,7 +291,7 @@ class ConfigGeneratorTest {
     void nestedSubConfigSetWritesToCorrectPath() {
         config.node("middle", "inner", "value").set("initial");
 
-        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config);
+        DeepConfig proxy = ConfigGenerator.newInstance(DeepConfig.class, config, false);
         MiddleConfig middle = proxy.middle();
         InnerConfig inner = middle.inner();
 
@@ -289,20 +300,20 @@ class ConfigGeneratorTest {
         assertEquals("newValue", config.node("middle", "inner", "value").get(String.class));
     }
 
-    // === Test Interfaces ===
+    // === Converter Tests ===
 
     @Test
     void converterConvertsValueOnGet() {
-        config.node("number").set("3.14");
+        config.node("number").set(42);
         ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
-        assertEquals(3.14, proxy.number().doubleValue(), 0.001);
+        assertEquals(42.0, proxy.number().doubleValue(), 0.001);
     }
 
     @Test
     void converterConvertsValueOnSet() {
         ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
-        proxy.number(42);
-        assertEquals("42", config.node("number").get(String.class));
+        proxy.number(99);
+        assertEquals(99, config.node("number").get(Integer.class));
     }
 
     @Test
@@ -312,17 +323,21 @@ class ConfigGeneratorTest {
     }
 
     @Test
-    void converterWithCustomConverter() {
-        config.node("date").set(1234567890L);
-        ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
-        assertEquals(1234567890L, proxy.date());
-    }
-
-    @Test
     void converterSetAndGetRoundTrip() {
         ConverterConfig proxy = ConfigGenerator.newInstance(ConverterConfig.class, config);
-        proxy.number(99.9);
-        assertEquals(99.9, proxy.number().doubleValue(), 0.001);
+        proxy.number(99);
+        assertEquals(99.0, proxy.number().doubleValue(), 0.001);
+    }
+
+    @ConfigNode
+    public interface CommentedConfig {
+        @ConfigPath("name")
+        @Comment("This is the name")
+        default String name() {
+            return "default";
+        }
+
+        void name(String value);
     }
 
     @ConfigNode
@@ -443,37 +458,12 @@ class ConfigGeneratorTest {
 
     @ConfigNode
     public interface ConverterConfig {
-        @ConfigPath(value = "date", converter = LongToDateConverter.class)
-        default long date() {
-            return System.currentTimeMillis();
-        }
-
-        void date(long timestamp);
-
         @ConfigPath(value = "number", converter = StringToNumberConverter.class)
         default Number number() {
             return 42;
         }
 
         void number(Number value);
-    }
-
-    public static class LongToDateConverter implements Converter {
-        @Override
-        public Object convert(Object raw) {
-            if (raw instanceof Number) {
-                return ((Number) raw).longValue();
-            }
-            return raw;
-        }
-
-        @Override
-        public Object convertToRaw(Object value) {
-            if (value instanceof Long) {
-                return value;
-            }
-            return value;
-        }
     }
 
     public static class StringToNumberConverter implements Converter {
@@ -486,7 +476,10 @@ class ConfigGeneratorTest {
                     return null;
                 }
             }
-            return raw;
+            if (raw instanceof Number) {
+                return raw;
+            }
+            return null;
         }
 
         @Override

@@ -21,8 +21,12 @@
         </dependency>
         <dependency>
             <groupId>io.github.projectunified</groupId>
-            <artifactId>craftconfig-gson</artifactId>
+            <artifactId>craftconfig-configurate</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.spongepowered</groupId>
+            <artifactId>configurate-yaml</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

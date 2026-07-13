@@ -1,7 +1,9 @@
 package io.github.projectunified.craftconfig.example;
 
+import io.github.projectunified.craftconfig.annotation.ConfigPath;
 import io.github.projectunified.craftconfig.bukkit.BukkitConfig;
 import io.github.projectunified.craftconfig.common.ConfigNode;
+import io.github.projectunified.craftconfig.proxy.ConfigGenerator;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.Arrays;
@@ -24,6 +26,7 @@ public class ExamplePlugin extends JavaPlugin {
         demonstrateNodeOperations();
         demonstrateComments();
         demonstrateTypedAccess();
+        demonstrateProxyConfig();
     }
 
     private void demonstrateBasicUsage() {
@@ -193,5 +196,54 @@ public class ExamplePlugin extends JavaPlugin {
         getLogger().info("Port (int): " + port);
         getLogger().info("Debug (boolean): " + debug);
         getLogger().info("Version (double): " + version);
+    }
+
+    private void demonstrateProxyConfig() {
+        getLogger().info("=== Proxy Config ===");
+
+        ServerProxy serverProxy = ConfigGenerator.newInstance(ServerProxy.class, config, false);
+
+        serverProxy.host("play.example.com");
+        serverProxy.port(25565);
+        serverProxy.motd("Welcome to Example Server!");
+        serverProxy.maxPlayers(100);
+
+        getLogger().info("Server host: " + serverProxy.host());
+        getLogger().info("Server port: " + serverProxy.port());
+        getLogger().info("Server motd: " + serverProxy.motd());
+        getLogger().info("Max players: " + serverProxy.maxPlayers());
+
+        config.save();
+    }
+
+    @io.github.projectunified.craftconfig.annotation.ConfigNode
+    public interface ServerProxy {
+        @ConfigPath("server.host")
+        default String host() {
+            return "localhost";
+        }
+
+        void host(String value);
+
+        @ConfigPath("server.port")
+        default int port() {
+            return 25565;
+        }
+
+        void port(int value);
+
+        @ConfigPath("server.motd")
+        default String motd() {
+            return "A Minecraft Server";
+        }
+
+        void motd(String value);
+
+        @ConfigPath("server.max-players")
+        default int maxPlayers() {
+            return 20;
+        }
+
+        void maxPlayers(int value);
     }
 }

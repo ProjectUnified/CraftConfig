@@ -4,6 +4,7 @@ import io.github.projectunified.craftconfig.common.CommentType;
 import io.github.projectunified.craftconfig.common.Config;
 import io.github.projectunified.craftconfig.common.ConfigLogger;
 import io.github.projectunified.craftconfig.common.ConfigNode;
+import io.github.projectunified.craftconfig.common.PathString;
 import org.spongepowered.configurate.CommentedConfigurationNode;
 import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.loader.AbstractConfigurationLoader;
@@ -60,7 +61,7 @@ public class ConfigurateConfig implements Config {
         if (path.length == 0) {
             return this;
         }
-        return new ConfigurateConfigNode(path, this, this.rootNode);
+        return new ConfigurateConfigNode(path, this, path);
     }
 
     @Override
@@ -76,7 +77,7 @@ public class ConfigurateConfig implements Config {
         Map<String, ConfigNode> nodes = new LinkedHashMap<>();
         for (Object key : this.rootNode.childrenMap().keySet()) {
             String childKey = Objects.toString(key);
-            nodes.put(childKey, new ConfigurateConfigNode(new String[]{childKey}, this, this.rootNode));
+            nodes.put(childKey, new ConfigurateConfigNode(new String[]{childKey}, this, new String[]{childKey}));
         }
         return nodes;
     }
@@ -166,12 +167,16 @@ public class ConfigurateConfig implements Config {
     public class ConfigurateConfigNode implements ConfigNode {
         private final String[] path;
         private final ConfigNode parent;
-        private final ConfigurationNode nativeNode;
+        private final String[] absolutePath;
 
-        ConfigurateConfigNode(String[] path, ConfigNode parent, ConfigurationNode nativeNode) {
+        ConfigurateConfigNode(String[] path, ConfigNode parent, String[] absolutePath) {
             this.path = path;
             this.parent = parent;
-            this.nativeNode = nativeNode;
+            this.absolutePath = absolutePath;
+        }
+
+        private ConfigurationNode nativeNode() {
+            return ConfigurateConfig.this.rootNode.node((Object[]) absolutePath);
         }
 
         @Override
@@ -191,15 +196,15 @@ public class ConfigurateConfig implements Config {
 
         @Override
         public Object get() {
-            return nativeNode.node((Object[]) path).raw();
+            return nativeNode().raw();
         }
 
         @Override
         public void set(Object value) {
             try {
-                nativeNode.node((Object[]) path).set(value);
+                nativeNode().set(value);
             } catch (SerializationException e) {
-                ConfigLogger.warn(ConfigurateConfig.class, "Something wrong when setting " + Arrays.toString(getPath()), e);
+                ConfigLogger.warn(ConfigurateConfig.class, "Something wrong when setting " + Arrays.toString(absolutePath), e);
             }
         }
 
@@ -208,47 +213,46 @@ public class ConfigurateConfig implements Config {
             if (path.length == 0) {
                 return this;
             }
-            return new ConfigurateConfigNode(path, this, this.nativeNode);
+            return new ConfigurateConfigNode(path, this, PathString.concat(this.absolutePath, path));
         }
 
         @Override
         public void remove() {
             try {
-                nativeNode.node((Object[]) path).set(null);
+                nativeNode().set(null);
             } catch (SerializationException e) {
-                ConfigLogger.warn(ConfigurateConfig.class, "Something wrong when removing " + Arrays.toString(getPath()), e);
+                ConfigLogger.warn(ConfigurateConfig.class, "Something wrong when removing " + Arrays.toString(absolutePath), e);
             }
         }
 
         @Override
         public boolean hasChild() {
-            ConfigurationNode node = nativeNode.node((Object[]) path);
+            ConfigurationNode node = nativeNode();
             return node.isMap() || node.isList();
         }
 
         @Override
         public Map<String, ConfigNode> getChildren() {
-            ConfigurationNode node = nativeNode.node((Object[]) path);
+            ConfigurationNode node = nativeNode();
             if (!node.isMap()) {
                 throw new IllegalStateException("The node is not a map");
             }
             Map<String, ConfigNode> nodes = new LinkedHashMap<>();
             for (Object key : node.childrenMap().keySet()) {
                 String childKey = Objects.toString(key);
-                nodes.put(childKey, new ConfigurateConfigNode(new String[]{childKey}, this, node));
+                nodes.put(childKey, new ConfigurateConfigNode(new String[]{childKey}, this, PathString.concat(this.absolutePath, new String[]{childKey})));
             }
             return nodes;
         }
 
         @Override
         public Object getNormalized() {
-            ConfigurationNode node = nativeNode.node((Object[]) path);
-            return normalizeNode(node);
+            return normalizeNode(nativeNode());
         }
 
         @Override
         public List<String> getComment(CommentType type) {
-            ConfigurationNode node = nativeNode.node((Object[]) path);
+            ConfigurationNode node = nativeNode();
             if (!(node instanceof CommentedConfigurationNode)) return Collections.emptyList();
             CommentedConfigurationNode commentedNode = (CommentedConfigurationNode) node;
             if (type != CommentType.BLOCK) return Collections.emptyList();
@@ -258,7 +262,7 @@ public class ConfigurateConfig implements Config {
 
         @Override
         public void setComment(CommentType type, List<String> value) {
-            ConfigurationNode node = nativeNode.node((Object[]) path);
+            ConfigurationNode node = nativeNode();
             if (!(node instanceof CommentedConfigurationNode)) return;
             CommentedConfigurationNode commentedNode = (CommentedConfigurationNode) node;
             if (type != CommentType.BLOCK) return;

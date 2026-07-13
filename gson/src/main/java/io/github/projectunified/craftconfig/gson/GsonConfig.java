@@ -8,6 +8,7 @@ import com.google.gson.stream.JsonWriter;
 import io.github.projectunified.craftconfig.common.Config;
 import io.github.projectunified.craftconfig.common.ConfigLogger;
 import io.github.projectunified.craftconfig.common.ConfigNode;
+import io.github.projectunified.craftconfig.common.PathString;
 import io.github.projectunified.craftconfig.gson.util.GsonUtil;
 
 import java.io.File;
@@ -34,13 +35,6 @@ public class GsonConfig implements Config {
 
     public GsonConfig(File file) {
         this(file, new Gson());
-    }
-
-    private static String[] concat(String[] a, String[] b) {
-        String[] result = new String[a.length + b.length];
-        System.arraycopy(a, 0, result, 0, a.length);
-        System.arraycopy(b, 0, result, a.length, b.length);
-        return result;
     }
 
     private Object getValueAt(String... absolutePath) {
@@ -253,7 +247,7 @@ public class GsonConfig implements Config {
             if (path.length == 0) {
                 return this;
             }
-            String[] childAbsolutePath = concat(this.absolutePath, path);
+            String[] childAbsolutePath = PathString.concat(this.absolutePath, path);
             return new GsonConfigNode(path, this, childAbsolutePath);
         }
 
@@ -277,7 +271,7 @@ public class GsonConfig implements Config {
             JsonObject object = (JsonObject) value;
             Map<String, ConfigNode> nodes = new LinkedHashMap<>();
             for (String key : object.keySet()) {
-                String[] childAbsolutePath = concat(absolutePath, new String[]{key});
+                String[] childAbsolutePath = PathString.concat(absolutePath, new String[]{key});
                 nodes.put(key, new GsonConfigNode(new String[]{key}, this, childAbsolutePath));
             }
             return nodes;

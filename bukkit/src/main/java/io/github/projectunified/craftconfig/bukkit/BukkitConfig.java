@@ -138,7 +138,7 @@ public class BukkitConfig implements Config {
         if (path.length == 0) {
             return this;
         }
-        return new BukkitConfigNode(path, this, configuration);
+        return new BukkitConfigNode(path, this, path);
     }
 
     @Override
@@ -152,7 +152,7 @@ public class BukkitConfig implements Config {
     public Map<String, ConfigNode> getChildren() {
         Map<String, ConfigNode> nodes = new LinkedHashMap<>();
         for (String key : this.configuration.getKeys(false)) {
-            nodes.put(key, new BukkitConfigNode(new String[]{key}, this, configuration));
+            nodes.put(key, new BukkitConfigNode(new String[]{key}, this, new String[]{key}));
         }
         return nodes;
     }
@@ -180,12 +180,12 @@ public class BukkitConfig implements Config {
     public class BukkitConfigNode implements ConfigNode {
         private final String[] path;
         private final ConfigNode parent;
-        private final ConfigurationSection parentSection;
+        private final String[] absolutePath;
 
-        BukkitConfigNode(String[] path, ConfigNode parent, ConfigurationSection parentSection) {
+        BukkitConfigNode(String[] path, ConfigNode parent, String[] absolutePath) {
             this.path = path;
             this.parent = parent;
-            this.parentSection = parentSection;
+            this.absolutePath = absolutePath;
         }
 
         @Override
@@ -205,12 +205,12 @@ public class BukkitConfig implements Config {
 
         @Override
         public Object get() {
-            return parentSection.get(BukkitConfig.this.getPath(path));
+            return BukkitConfig.this.configuration.get(BukkitConfig.this.getPath(absolutePath));
         }
 
         @Override
         public void set(Object value) {
-            parentSection.set(BukkitConfig.this.getPath(path), value);
+            BukkitConfig.this.configuration.set(BukkitConfig.this.getPath(absolutePath), value);
         }
 
         @Override
@@ -218,16 +218,13 @@ public class BukkitConfig implements Config {
             if (path.length == 0) {
                 return this;
             }
-            ConfigurationSection section = parentSection.getConfigurationSection(BukkitConfig.this.getPath(this.path));
-            if (section == null) {
-                throw new IllegalStateException("The node is not a configuration section");
-            }
-            return new BukkitConfigNode(path, this, section);
+            String[] childAbsolutePath = PathString.concat(this.absolutePath, path);
+            return new BukkitConfigNode(path, this, childAbsolutePath);
         }
 
         @Override
         public void remove() {
-            parentSection.set(BukkitConfig.this.getPath(path), null);
+            BukkitConfig.this.configuration.set(BukkitConfig.this.getPath(absolutePath), null);
         }
 
         @Override
@@ -238,12 +235,13 @@ public class BukkitConfig implements Config {
         @Override
         public Map<String, ConfigNode> getChildren() {
             Map<String, ConfigNode> nodes = new LinkedHashMap<>();
-            ConfigurationSection section = parentSection.getConfigurationSection(BukkitConfig.this.getPath(this.path));
+            ConfigurationSection section = BukkitConfig.this.configuration.getConfigurationSection(BukkitConfig.this.getPath(absolutePath));
             if (section == null) {
-                throw new IllegalStateException("The node is not a configuration section");
+                return nodes;
             }
             for (String key : section.getKeys(false)) {
-                nodes.put(key, new BukkitConfigNode(new String[]{key}, this, section));
+                String[] childAbsolutePath = PathString.concat(this.absolutePath, new String[]{key});
+                nodes.put(key, new BukkitConfigNode(new String[]{key}, this, childAbsolutePath));
             }
             return nodes;
         }
@@ -251,12 +249,12 @@ public class BukkitConfig implements Config {
         @Override
         public List<String> getComment(CommentType type) {
             if (!isCommentSupported) return Collections.emptyList();
-            String joined = BukkitConfig.this.getPath(this.path);
+            String joined = BukkitConfig.this.getPath(absolutePath);
             switch (type) {
                 case BLOCK:
-                    return parentSection.getComments(joined);
+                    return BukkitConfig.this.configuration.getComments(joined);
                 case SIDE:
-                    return parentSection.getInlineComments(joined);
+                    return BukkitConfig.this.configuration.getInlineComments(joined);
                 default:
                     return Collections.emptyList();
             }
@@ -265,13 +263,13 @@ public class BukkitConfig implements Config {
         @Override
         public void setComment(CommentType type, List<String> value) {
             if (!isCommentSupported) return;
-            String joined = BukkitConfig.this.getPath(this.path);
+            String joined = BukkitConfig.this.getPath(absolutePath);
             switch (type) {
                 case BLOCK:
-                    parentSection.setComments(joined, value);
+                    BukkitConfig.this.configuration.setComments(joined, value);
                     break;
                 case SIDE:
-                    parentSection.setInlineComments(joined, value);
+                    BukkitConfig.this.configuration.setInlineComments(joined, value);
                     break;
                 default:
                     break;

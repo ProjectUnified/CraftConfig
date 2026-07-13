@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.projectunified.craftconfig.common.PathString;
 import static io.github.projectunified.craftconfig.common.PathString.joinDefault;
 
 /**
@@ -115,7 +116,7 @@ public class BungeeConfig implements Config {
         if (path.length == 0) {
             return this;
         }
-        return new BungeeConfigNode(path, this, this.configuration);
+        return new BungeeConfigNode(path, this, path);
     }
 
     @Override
@@ -127,7 +128,7 @@ public class BungeeConfig implements Config {
     public Map<String, ConfigNode> getChildren() {
         Map<String, ConfigNode> nodes = new LinkedHashMap<>();
         for (String key : this.configuration.getKeys()) {
-            nodes.put(key, new BungeeConfigNode(new String[]{key}, this, this.configuration));
+            nodes.put(key, new BungeeConfigNode(new String[]{key}, this, new String[]{key}));
         }
         return nodes;
     }
@@ -147,12 +148,12 @@ public class BungeeConfig implements Config {
     public class BungeeConfigNode implements ConfigNode {
         private final String[] path;
         private final ConfigNode parent;
-        private final Configuration section;
+        private final String[] absolutePath;
 
-        BungeeConfigNode(String[] path, ConfigNode parent, Configuration section) {
+        BungeeConfigNode(String[] path, ConfigNode parent, String[] absolutePath) {
             this.path = path;
             this.parent = parent;
-            this.section = section;
+            this.absolutePath = absolutePath;
         }
 
         @Override
@@ -172,12 +173,12 @@ public class BungeeConfig implements Config {
 
         @Override
         public Object get() {
-            return section.get(joinDefault(path));
+            return BungeeConfig.this.configuration.get(joinDefault(absolutePath));
         }
 
         @Override
         public void set(Object value) {
-            section.set(joinDefault(path), value);
+            BungeeConfig.this.configuration.set(joinDefault(absolutePath), value);
         }
 
         @Override
@@ -185,39 +186,37 @@ public class BungeeConfig implements Config {
             if (path.length == 0) {
                 return this;
             }
-            Configuration childSection = this.section.getSection(joinDefault(getPath()));
-            if (childSection == null) {
-                throw new IllegalStateException("The node is not a configuration section");
-            }
-            return new BungeeConfigNode(path, this, childSection);
+            String[] childAbsolutePath = PathString.concat(this.absolutePath, path);
+            return new BungeeConfigNode(path, this, childAbsolutePath);
         }
 
         @Override
         public void remove() {
-            section.set(joinDefault(path), null);
+            BungeeConfig.this.configuration.set(joinDefault(absolutePath), null);
         }
 
         @Override
         public boolean hasChild() {
-            return section.getSection(joinDefault(path)) != null;
+            return BungeeConfig.this.configuration.getSection(joinDefault(absolutePath)) != null;
         }
 
         @Override
         public Map<String, ConfigNode> getChildren() {
-            Configuration currentSection = section.getSection(joinDefault(path));
-            if (currentSection == null) {
-                throw new IllegalStateException("The node is not a configuration section");
-            }
             Map<String, ConfigNode> nodes = new LinkedHashMap<>();
+            Configuration currentSection = BungeeConfig.this.configuration.getSection(joinDefault(absolutePath));
+            if (currentSection == null) {
+                return nodes;
+            }
             for (String key : currentSection.getKeys()) {
-                nodes.put(key, new BungeeConfigNode(new String[]{key}, this, currentSection));
+                String[] childAbsolutePath = PathString.concat(this.absolutePath, new String[]{key});
+                nodes.put(key, new BungeeConfigNode(new String[]{key}, this, childAbsolutePath));
             }
             return nodes;
         }
 
         @Override
         public Object getNormalized() {
-            Object value = section.get(joinDefault(path));
+            Object value = BungeeConfig.this.configuration.get(joinDefault(absolutePath));
             return BungeeConfig.this.normalize(value);
         }
 
