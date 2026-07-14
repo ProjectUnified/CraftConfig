@@ -58,6 +58,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         while (!queue.isEmpty()) {
             Class<?> current = queue.poll();
             for (Method method : current.getDeclaredMethods()) {
+                if (method.isSynthetic() || method.isBridge()) continue;
                 String key = method.getName() + Arrays.toString(method.getParameterTypes());
                 if (seen.add(key)) {
                     result.add(method);

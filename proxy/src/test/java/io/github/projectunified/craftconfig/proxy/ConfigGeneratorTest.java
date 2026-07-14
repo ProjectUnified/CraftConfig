@@ -452,6 +452,42 @@ class ConfigGeneratorTest {
         assertTrue(middleIdx < zebraIdx, "middle should come before zebra");
     }
 
+    @Test
+    void covariantReturnTypeUsesChildAnnotation() {
+        CovariantChildConfig proxy = ConfigGenerator.newInstance(CovariantChildConfig.class, config, true, false, true);
+        assertNotNull(proxy.settings());
+        assertEquals("childValue", proxy.settings().childSetting());
+        assertEquals("defaultValue", proxy.settings().parentSetting());
+    }
+
+    @Test
+    void covariantReturnTypeWritesCorrectPath() {
+        CovariantChildConfig proxy = ConfigGenerator.newInstance(CovariantChildConfig.class, config, true, false, true);
+        assertEquals("childValue", config.node("Settings", "childSetting").get(String.class));
+        assertEquals("defaultValue", config.node("Settings", "parentSetting").get(String.class));
+    }
+
+    @Test
+    void covariantReturnTypeReadsExistingValues() {
+        config.node("Settings", "childSetting").set("customChild");
+        config.node("Settings", "parentSetting").set("customParent");
+
+        CovariantChildConfig proxy = ConfigGenerator.newInstance(CovariantChildConfig.class, config, false);
+        assertEquals("customChild", proxy.settings().childSetting());
+        assertEquals("customParent", proxy.settings().parentSetting());
+    }
+
+    @Test
+    void covariantReturnTypeSetsValues() {
+        CovariantChildConfig proxy = ConfigGenerator.newInstance(CovariantChildConfig.class, config);
+        CovariantChildSettingsConfig settings = proxy.settings();
+        settings.childSetting("newChild");
+        settings.parentSetting("newParent");
+
+        assertEquals("newChild", config.node("Settings", "childSetting").get(String.class));
+        assertEquals("newParent", config.node("Settings", "parentSetting").get(String.class));
+    }
+
     @ConfigNode
     public interface PriorityConfig {
         @ConfigPath(value = "zebra", priority = 30)
@@ -616,6 +652,8 @@ class ConfigGeneratorTest {
         void value(String value);
     }
 
+    // === Covariant Return Type Tests ===
+
     @ConfigNode
     public interface ParentConfig {
         @ConfigPath("host")
@@ -681,6 +719,39 @@ class ConfigGeneratorTest {
         }
 
         void number(Number value);
+    }
+
+    @ConfigNode
+    public interface CovariantParentConfig {
+        @ConfigPath("Settings")
+        CovariantParentSettingsConfig settings();
+    }
+
+    @ConfigNode
+    public interface CovariantParentSettingsConfig {
+        @ConfigPath("parentSetting")
+        default String parentSetting() {
+            return "defaultValue";
+        }
+
+        void parentSetting(String value);
+    }
+
+    @ConfigNode
+    public interface CovariantChildConfig extends CovariantParentConfig {
+        @Override
+        @ConfigPath("Settings")
+        CovariantChildSettingsConfig settings();
+    }
+
+    @ConfigNode
+    public interface CovariantChildSettingsConfig extends CovariantParentSettingsConfig {
+        @ConfigPath("childSetting")
+        default String childSetting() {
+            return "childValue";
+        }
+
+        void childSetting(String value);
     }
 
     public static class StringToNumberConverter implements Converter {
