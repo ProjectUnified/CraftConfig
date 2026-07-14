@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.projectunified</groupId>
         <artifactId>craftconfig</artifactId>
-        <version>0.3.2</version>
+        <version>0.3.3</version>
     </parent>
 
     <artifactId>craftconfig-gson-util</artifactId>
