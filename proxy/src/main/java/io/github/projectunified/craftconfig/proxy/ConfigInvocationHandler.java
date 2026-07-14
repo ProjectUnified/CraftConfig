@@ -96,15 +96,12 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             return handleGetter(proxy, method);
         }
 
-        if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
-            if (method.isDefault()) {
-                return DefaultMethodHandler.invoke(proxy, method, args);
-            }
-            return handleSetter(method, args[0]);
-        }
-
         if (method.isDefault()) {
             return DefaultMethodHandler.invoke(proxy, method, args);
+        }
+
+        if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
+            return handleSetter(method, args[0]);
         }
 
         throw new UnsupportedOperationException("Method " + name + " is not supported");
