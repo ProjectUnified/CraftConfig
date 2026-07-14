@@ -97,6 +97,9 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         }
 
         if (method.getParameterCount() == 1 && method.getReturnType() == void.class) {
+            if (method.isDefault()) {
+                return DefaultMethodHandler.invoke(proxy, method, args);
+            }
             return handleSetter(method, args[0]);
         }
 
