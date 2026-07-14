@@ -123,7 +123,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             String[] path = configPath.value();
             if (isConfigInterface(method.getReturnType())) {
                 ConfigNode childNode = node.node(path);
-                new ConfigInvocationHandler<>(method.getReturnType(), childNode, stickyValue, true);
+                getSubProxy(childNode, method.getReturnType(), true);
                 continue;
             }
 
@@ -151,7 +151,9 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             node.setComment(Arrays.asList(clazz.getAnnotation(Comment.class).value()));
         }
 
-        node.getConfig().save();
+        if (node instanceof Config) {
+            node.getConfig().save();
+        }
     }
 
     private Object handleGetter(Object proxy, Method method) {
@@ -166,7 +168,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
         String[] path = configPath.value();
 
         if (isConfigInterface(method.getReturnType())) {
-            return getSubProxy(node.node(path), method.getReturnType());
+            return getSubProxy(node.node(path), method.getReturnType(), false);
         }
 
         List<String> pathKey = Arrays.asList(path);
@@ -240,12 +242,12 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
     }
 
     @SuppressWarnings("unchecked")
-    private <S> S getSubProxy(ConfigNode childNode, Class<S> subInterface) {
+    private <S> S getSubProxy(ConfigNode childNode, Class<S> subInterface, boolean addDefault) {
         List<String> pathKey = Arrays.asList(childNode.getPath());
         return (S) subProxies.computeIfAbsent(pathKey, key ->
                 Proxy.newProxyInstance(
                         subInterface.getClassLoader(),
                         new Class[]{subInterface},
-                        new ConfigInvocationHandler<>(subInterface, childNode, stickyValue, false)));
+                        new ConfigInvocationHandler<>(subInterface, childNode, stickyValue, addDefault)));
     }
 }
