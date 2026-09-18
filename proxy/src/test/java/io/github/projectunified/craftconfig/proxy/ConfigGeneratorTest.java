@@ -10,6 +10,7 @@ import io.github.projectunified.craftconfig.configurate.ConfigurateConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.spongepowered.configurate.ConfigurationNode;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
 import java.io.File;
@@ -298,6 +299,89 @@ class ConfigGeneratorTest {
         inner.value("newValue");
 
         assertEquals("newValue", config.node("middle", "inner", "value").get(String.class));
+    }
+
+    // === Nested (Interface-Typed) Default Method Tests ===
+
+    @Test
+    void nestedDefaultSeedsSubConfigFromDefaultInstance() {
+        GuiRootConfig proxy = ConfigGenerator.newInstance(GuiRootConfig.class, config, true, false, true);
+
+        assertEquals("ARROW", config.node("gui", "back", "material").get(String.class));
+        assertEquals("&eBack", config.node("gui", "back", "name").get(String.class));
+
+        assertEquals(Material.ARROW, proxy.gui().back().material());
+        assertEquals("&eBack", proxy.gui().back().name());
+    }
+
+    @Test
+    void nestedDefaultIsPersistedToFile() throws Exception {
+        ConfigGenerator.newInstance(GuiRootConfig.class, config, true, false, true);
+
+        YamlConfigurationLoader loader = YamlConfigurationLoader.builder()
+                .file(tempDir.resolve("test.yml").toFile())
+                .build();
+        ConfigurationNode root = loader.load();
+        assertEquals("ARROW", root.node("gui", "back", "material").get(String.class));
+        assertEquals("&eBack", root.node("gui", "back", "name").get(String.class));
+        assertEquals("DIAMOND", root.node("gui", "back", "icon", "material").get(String.class));
+    }
+
+    @Test
+    void nestedDefaultDoesNotOverwriteExistingValues() {
+        config.node("gui", "back", "material").set("DIAMOND");
+
+        GuiRootConfig proxy = ConfigGenerator.newInstance(GuiRootConfig.class, config, false, false, true);
+
+        assertEquals("DIAMOND", config.node("gui", "back", "material").get(String.class));
+        assertEquals("&eBack", config.node("gui", "back", "name").get(String.class));
+
+        assertEquals(Material.DIAMOND, proxy.gui().back().material());
+        assertEquals("&eBack", proxy.gui().back().name());
+    }
+
+    @Test
+    void nestedDefaultFillsOnlyMissingLeaves() {
+        config.node("gui", "back", "name").set("custom");
+        config.node("gui", "back", "icon", "material").set("ARROW");
+
+        GuiRootConfig proxy = ConfigGenerator.newInstance(GuiRootConfig.class, config, false, false, true);
+
+        assertEquals("custom", proxy.gui().back().name());
+        assertEquals(Material.ARROW, proxy.gui().back().icon().material());
+
+        assertEquals("ARROW", config.node("gui", "back", "material").get(String.class));
+        assertEquals("&bIcon", config.node("gui", "back", "icon", "name").get(String.class));
+    }
+
+    @Test
+    void nestedDefaultMaterializesThreeLevels() {
+        GuiRootConfig proxy = ConfigGenerator.newInstance(GuiRootConfig.class, config, true, false, true);
+
+        assertEquals("DIAMOND", config.node("gui", "back", "icon", "material").get(String.class));
+        assertEquals("&bIcon", config.node("gui", "back", "icon", "name").get(String.class));
+
+        assertEquals(Material.DIAMOND, proxy.gui().back().icon().material());
+        assertEquals("&bIcon", proxy.gui().back().icon().name());
+    }
+
+    @Test
+    void nestedDefaultUsesConverterOfLeafMethod() {
+        ConverterHolderConfig proxy = ConfigGenerator.newInstance(ConverterHolderConfig.class, config, true, false, true);
+
+        assertEquals("99", config.node("holder", "number").get(String.class));
+        assertEquals(99.0, proxy.holder().number().doubleValue(), 0.001);
+    }
+
+    @Test
+    void abstractInterfaceGetterStillUsesLeafDefaults() {
+        PlainHolderConfig proxy = ConfigGenerator.newInstance(PlainHolderConfig.class, config, true, false, true);
+
+        assertEquals("STONE", config.node("plain", "material").get(String.class));
+        assertEquals(" ", config.node("plain", "name").get(String.class));
+
+        assertEquals(Material.STONE, proxy.plain().material());
+        assertEquals(" ", proxy.plain().name());
     }
 
     // === Interface Inheritance Tests ===
@@ -752,6 +836,148 @@ class ConfigGeneratorTest {
         }
 
         void childSetting(String value);
+    }
+
+    public enum Material {
+        STONE, ARROW, DIAMOND
+    }
+
+    @ConfigNode
+    public interface GuiRootConfig {
+        @ConfigPath("gui")
+        GuiConfig gui();
+    }
+
+    @ConfigNode
+    public interface GuiConfig {
+        @ConfigPath("back")
+        default ButtonConfig back() {
+            return new ButtonImpl(Material.ARROW, "&eBack", new IconImpl(Material.DIAMOND, "&bIcon"));
+        }
+    }
+
+    @ConfigNode
+    public interface ButtonConfig {
+        @ConfigPath("material")
+        default Material material() {
+            return Material.STONE;
+        }
+
+        @ConfigPath("name")
+        default String name() {
+            return " ";
+        }
+
+        @ConfigPath("icon")
+        IconConfig icon();
+    }
+
+    @ConfigNode
+    public interface IconConfig {
+        @ConfigPath("material")
+        default Material material() {
+            return Material.STONE;
+        }
+
+        @ConfigPath("name")
+        default String name() {
+            return " ";
+        }
+    }
+
+    public static class ButtonImpl implements ButtonConfig {
+        private final Material material;
+        private final String name;
+        private final IconConfig icon;
+
+        public ButtonImpl(Material material, String name, IconConfig icon) {
+            this.material = material;
+            this.name = name;
+            this.icon = icon;
+        }
+
+        @Override
+        public Material material() {
+            return material;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public IconConfig icon() {
+            return icon;
+        }
+    }
+
+    public static class IconImpl implements IconConfig {
+        private final Material material;
+        private final String name;
+
+        public IconImpl(Material material, String name) {
+            this.material = material;
+            this.name = name;
+        }
+
+        @Override
+        public Material material() {
+            return material;
+        }
+
+        @Override
+        public String name() {
+            return name;
+        }
+    }
+
+    @ConfigNode
+    public interface PlainHolderConfig {
+        @ConfigPath("plain")
+        PlainButtonConfig plain();
+    }
+
+    @ConfigNode
+    public interface PlainButtonConfig {
+        @ConfigPath("material")
+        default Material material() {
+            return Material.STONE;
+        }
+
+        @ConfigPath("name")
+        default String name() {
+            return " ";
+        }
+    }
+
+    @ConfigNode
+    public interface ConverterHolderConfig {
+        @ConfigPath("holder")
+        default ConverterLeafConfig holder() {
+            return new ConverterLeafImpl();
+        }
+    }
+
+    @ConfigNode
+    public interface ConverterLeafConfig {
+        @ConfigPath(value = "number", converter = StringToNumberConverter.class)
+        default Number number() {
+            return 42;
+        }
+
+        void number(Number value);
+    }
+
+    public static class ConverterLeafImpl implements ConverterLeafConfig {
+        @Override
+        public Number number() {
+            return 99;
+        }
+
+        @Override
+        public void number(Number value) {
+        }
     }
 
     public static class StringToNumberConverter implements Converter {

@@ -24,6 +24,11 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
     private final Map<List<String>, Object> cachedValues = new ConcurrentHashMap<>();
     private final Set<List<String>> stickyKeys = new HashSet<>();
 
+    private static final Comparator<Method> BY_PRIORITY = Comparator.comparingInt(m -> {
+        ConfigPath cp = m.getAnnotation(ConfigPath.class);
+        return cp != null ? cp.priority() : 0;
+    });
+
     ConfigInvocationHandler(Class<T> clazz, ConfigNode node, boolean stickyValue, boolean addDefault) {
         this.clazz = clazz;
         this.node = node;
@@ -109,10 +114,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
 
     private void setupDefaults() {
         List<Method> sorted = new ArrayList<>(allMethods);
-        sorted.sort(Comparator.comparingInt(m -> {
-            ConfigPath cp = m.getAnnotation(ConfigPath.class);
-            return cp != null ? cp.priority() : 0;
-        }));
+        sorted.sort(BY_PRIORITY);
 
         for (Method method : sorted) {
             ConfigPath configPath = method.getAnnotation(ConfigPath.class);
@@ -123,6 +125,7 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
             String[] path = configPath.value();
             if (isConfigInterface(method.getReturnType())) {
                 ConfigNode childNode = node.node(path);
+                setupInterfaceDefaults(childNode, method.getReturnType(), invokeInterfaceDefault(method));
                 getSubProxy(childNode, method.getReturnType(), true);
                 continue;
             }
@@ -153,6 +156,34 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
 
         if (node instanceof Config) {
             node.getConfig().save();
+        }
+    }
+
+    private void setupInterfaceDefaults(ConfigNode childNode, Class<?> configInterface, Object defaultInstance) {
+        if (defaultInstance == null) return;
+
+        List<Method> sorted = new ArrayList<>(getAllDeclaredMethods(configInterface));
+        sorted.sort(BY_PRIORITY);
+
+        for (Method method : sorted) {
+            ConfigPath configPath = method.getAnnotation(ConfigPath.class);
+            if (configPath == null) continue;
+            if (method.getParameterCount() != 0) continue;
+            Class<?> returnType = method.getReturnType();
+            if (returnType == void.class || returnType == Void.class) continue;
+
+            Object value = invokeGetter(defaultInstance, method);
+            ConfigNode childPathNode = childNode.node(configPath.value());
+
+            if (isConfigInterface(returnType)) {
+                setupInterfaceDefaults(childPathNode, returnType, value);
+                continue;
+            }
+
+            if (value == null || childPathNode.exists()) continue;
+
+            Converter converter = resolveConverter(method.getGenericReturnType(), configPath);
+            childPathNode.set(converter.convertToRaw(value));
         }
     }
 
@@ -232,6 +263,30 @@ public class ConfigInvocationHandler<T> implements InvocationHandler {
                     : DefaultMethodHandler.invoke(method);
         } catch (Throwable e) {
             throw new IllegalStateException("Failed to invoke default method: " + method.getName(), e);
+        }
+    }
+
+    private Object invokeInterfaceDefault(Method method) {
+        if (!method.isDefault()) return null;
+        try {
+            return invokeDefaultMethod(null, method);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private static Object invokeGetter(Object instance, Method method) {
+        try {
+            if (!method.isAccessible()) {
+                method.setAccessible(true);
+            }
+        } catch (RuntimeException ignored) {
+            // Not accessible to be made accessible, invoke anyway and let it fail below
+        }
+        try {
+            return method.invoke(instance);
+        } catch (Throwable e) {
+            return null;
         }
     }
 
