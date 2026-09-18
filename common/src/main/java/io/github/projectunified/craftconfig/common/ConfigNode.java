@@ -65,7 +65,7 @@ public interface ConfigNode {
     /**
      * Get a typed value at this node with a default
      *
-     * @param type the type class
+     * @param type the type class, primitive classes are treated as their wrapper classes
      * @param def  the default value
      * @param <T>  the type
      * @return the typed value, or the default if not present or not assignable
@@ -76,29 +76,30 @@ public interface ConfigNode {
         if (value == null) {
             return def;
         }
-        if (type == String.class) {
-            return type.cast(String.valueOf(value));
+        Class<?> boxedType = BoxedTypes.box(type);
+        if (boxedType == String.class) {
+            return (T) String.valueOf(value);
         }
-        if (value instanceof Number && Number.class.isAssignableFrom(type)) {
+        if (value instanceof Number && Number.class.isAssignableFrom(boxedType)) {
             Number number = (Number) value;
-            if (type == Integer.class || type == int.class) {
+            if (boxedType == Integer.class) {
                 return (T) Integer.valueOf(number.intValue());
-            } else if (type == Long.class || type == long.class) {
+            } else if (boxedType == Long.class) {
                 return (T) Long.valueOf(number.longValue());
-            } else if (type == Double.class || type == double.class) {
+            } else if (boxedType == Double.class) {
                 return (T) Double.valueOf(number.doubleValue());
-            } else if (type == Float.class || type == float.class) {
+            } else if (boxedType == Float.class) {
                 return (T) Float.valueOf(number.floatValue());
-            } else if (type == Short.class || type == short.class) {
+            } else if (boxedType == Short.class) {
                 return (T) Short.valueOf(number.shortValue());
-            } else if (type == Byte.class || type == byte.class) {
+            } else if (boxedType == Byte.class) {
                 return (T) Byte.valueOf(number.byteValue());
             }
         }
-        if (value instanceof Boolean && (type == Boolean.class || type == boolean.class)) {
-            return type.cast(value);
+        if (value instanceof Boolean && boxedType == Boolean.class) {
+            return (T) value;
         }
-        return type.isInstance(value) ? type.cast(value) : def;
+        return boxedType.isInstance(value) ? (T) boxedType.cast(value) : def;
     }
 
     /**

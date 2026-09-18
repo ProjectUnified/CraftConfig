@@ -120,6 +120,52 @@ class ConfigDefaultMethodsTest {
     }
 
     @Test
+    void getTypeWithPrimitiveClassReturnsValue() {
+        config.node("key1").set(42);
+
+        int intValue = config.node("key1").get(int.class);
+        long longValue = config.node("key1").get(long.class);
+        double doubleValue = config.node("key1").get(double.class);
+        float floatValue = config.node("key1").get(float.class);
+        short shortValue = config.node("key1").get(short.class);
+        byte byteValue = config.node("key1").get(byte.class);
+
+        assertEquals(42, intValue);
+        assertEquals(42L, longValue);
+        assertEquals(42.0, doubleValue, 0.001);
+        assertEquals(42.0f, floatValue, 0.001f);
+        assertEquals((short) 42, shortValue);
+        assertEquals((byte) 42, byteValue);
+    }
+
+    @Test
+    void getTypeWithPrimitiveBooleanClassReturnsValue() {
+        config.node("key1").set(true);
+        boolean value = config.node("key1").get(boolean.class);
+        assertTrue(value);
+    }
+
+    @Test
+    void getTypeWithPrimitiveCharClassReturnsValue() {
+        config.node("key1").set('a');
+        char value = config.node("key1").get(char.class);
+        assertEquals('a', value);
+    }
+
+    @Test
+    void getTypeWithPrimitiveClassUsesDefaultWhenMissing() {
+        int value = config.node("nonexistent").get(int.class, 7);
+        assertEquals(7, value);
+    }
+
+    @Test
+    void getTypeWithPrimitiveClassUsesDefaultForWrongType() {
+        config.node("key1").set("hello");
+        int value = config.node("key1").get(int.class, 7);
+        assertEquals(7, value);
+    }
+
+    @Test
     void getTypeWithoutDefaultReturnsValue() {
         config.node("key1").set("hello");
         assertEquals("hello", config.node("key1").get(String.class));
