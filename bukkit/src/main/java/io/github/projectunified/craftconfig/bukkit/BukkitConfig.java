@@ -160,7 +160,8 @@ public class BukkitConfig implements Config {
     @Override
     public List<String> getComment(CommentType type) {
         String header = this.configuration.options().header();
-        return header.isEmpty() ? Collections.emptyList() : Arrays.asList(header.split("\\r?\\n"));
+        //noinspection ConstantValue
+        return header == null || header.isEmpty() ? Collections.emptyList() : Arrays.asList(header.split("\\r?\\n"));
     }
 
     @Override
