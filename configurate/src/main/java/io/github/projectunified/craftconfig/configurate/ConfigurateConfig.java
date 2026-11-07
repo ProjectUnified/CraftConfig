@@ -26,21 +26,9 @@ public class ConfigurateConfig implements Config {
         this.rootNode = builder.build().createNode();
     }
 
-    private static Object normalizeNode(ConfigurationNode node) {
-        if (node.isList()) {
-            return node.childrenList();
-        } else if (node.isMap()) {
-            Map<String, Object> map = new LinkedHashMap<>();
-            node.childrenMap().forEach((key, value) -> map.put(Objects.toString(key), value));
-            return map;
-        } else {
-            return node.raw();
-        }
-    }
-
     @Override
     public Object get() {
-        return this.rootNode;
+        return this.rootNode.raw();
     }
 
     @Override
@@ -146,10 +134,23 @@ public class ConfigurateConfig implements Config {
 
     @Override
     public Object normalize(Object object) {
-        if (object instanceof ConfigurationNode) {
-            return normalizeNode((ConfigurationNode) object);
+        return normalizeNode(object);
+    }
+
+    private static Object normalizeNode(Object object) {
+        if (!(object instanceof ConfigurationNode)) {
+            return object;
         }
-        return object;
+        ConfigurationNode node = (ConfigurationNode) object;
+        if (node.isList()) {
+            return node.childrenList();
+        } else if (node.isMap()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            node.childrenMap().forEach((key, value) -> map.put(Objects.toString(key), value));
+            return map;
+        } else {
+            return node.raw();
+        }
     }
 
     @Override
@@ -239,11 +240,6 @@ public class ConfigurateConfig implements Config {
                 nodes.put(childKey, new ConfigurateConfigNode(new String[]{childKey}, this, PathString.concat(this.absolutePath, new String[]{childKey})));
             }
             return nodes;
-        }
-
-        @Override
-        public Object getNormalized() {
-            return normalizeNode(nativeNode());
         }
 
         @Override

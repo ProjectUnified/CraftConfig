@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,6 +47,21 @@ class ConfigurateConfigTest {
         ConfigurateConfig config = createConfig("test.yml");
         config.node("a", "b", "c").set("world");
         assertEquals("world", config.node("a", "b", "c").get());
+    }
+
+    @Test
+    void getNormalizedOfMapNodeReturnsPlainValues() {
+        ConfigurateConfig config = createConfig("holders.yml");
+        config.node("holders", "jump", "type").set("statistic");
+        config.node("holders", "jump", "statistic").set("minecraft:jump");
+
+        Object normalized = config.node("holders").getNormalized();
+
+        assertInstanceOf(Map.class, normalized);
+        Object jump = ((Map<?, ?>) normalized).get("jump");
+        assertInstanceOf(Map.class, jump);
+        assertEquals("statistic", ((Map<?, ?>) jump).get("type"));
+        assertEquals("minecraft:jump", ((Map<?, ?>) jump).get("statistic"));
     }
 
     @Test
